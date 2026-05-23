@@ -9,6 +9,15 @@ Usage:
   ros2 launch multi_tb3_system world_empty.launch.py
   ros2 launch multi_tb3_system world_empty.launch.py use_rviz:=true
   ros2 launch multi_tb3_system world_empty.launch.py use_gui:=false
+
+RECOMMENDED TELEOP (Burst-Mode):
+  To teleoperate tb1 safely with "Hold-To-Move" functionality (stops immediately on release),
+  run the custom teleop controller which natively publishes TwistStamped:
+  ros2 run multi_tb3_system teleop_controller.py
+
+TROUBLESHOOTING:
+  - Check /cmd_vel types using: ros2 topic info /cmd_vel --verbose
+  - Ensure teleop publishes geometry_msgs/msg/TwistStamped
 """
 
 from ament_index_python.packages import get_package_share_directory
@@ -24,7 +33,7 @@ def generate_launch_description():
 
     use_rviz_arg = DeclareLaunchArgument(
         'use_rviz',
-        default_value='false',
+        default_value='true',
         description='Launch RViz2',
     )
     use_gui_arg = DeclareLaunchArgument(

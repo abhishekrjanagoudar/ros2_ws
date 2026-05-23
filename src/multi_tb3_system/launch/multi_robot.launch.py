@@ -18,7 +18,7 @@ Starts:
 
 Launch arguments:
   world    : 'empty' or 'columns' (default: empty)
-  use_rviz : 'true'/'false'        (default: false)
+  use_rviz : 'true'/'false'        (default: true)
   use_gui  : 'true'/'false'        (default: true)
 
 Topic mapping after bridging:
@@ -26,6 +26,15 @@ Topic mapping after bridging:
   /tbX/odom      - Odometry  from Gazebo (/model/tbX/odometry)
   /tbX/cmd_vel   - Velocity  to   Gazebo (/model/tbX/cmd_vel)
   /clock         - Sim clock from Gazebo
+
+RECOMMENDED TELEOP (Burst-Mode):
+  To teleoperate tb1 safely with "Hold-To-Move" functionality (stops immediately on release),
+  run the custom teleop controller which natively publishes TwistStamped:
+  ros2 run multi_tb3_system teleop_controller.py
+
+TROUBLESHOOTING:
+  - Check /cmd_vel types using: ros2 topic info /cmd_vel --verbose
+  - Ensure teleop publishes geometry_msgs/msg/TwistStamped
 """
 
 import os
@@ -203,7 +212,7 @@ def generate_launch_description() -> LaunchDescription:
     # ── Launch arguments ──────────────────────────────────────────────────────
     world_arg    = DeclareLaunchArgument('world',    default_value='empty',
                        description="World to load: 'empty' or 'columns'")
-    use_rviz_arg = DeclareLaunchArgument('use_rviz', default_value='false',
+    use_rviz_arg = DeclareLaunchArgument('use_rviz', default_value='true',
                        description='Start RViz2')
     use_gui_arg  = DeclareLaunchArgument('use_gui',  default_value='true',
                        description='Start Gazebo GUI client')

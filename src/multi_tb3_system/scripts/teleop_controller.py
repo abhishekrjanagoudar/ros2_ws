@@ -2,30 +2,28 @@
 """
 teleop_controller.py
 ====================
-Keyboard teleoperation wrapper for Robot 1 (tb1) in the Multi-TurtleBot3
-convoy system.
+Burst-Mode (Hold-To-Move) keyboard teleoperation wrapper for Robot 1 (tb1).
 
-This node reads keyboard input and publishes TwistStamped velocity commands
-to /tb1/cmd_vel so that the leader robot can be driven manually.
+FEATURE: BURST / HOLD-TO-MOVE
+Unlike standard teleop nodes that latch velocities, this node requires the user 
+to hold the key down to move. 
+- Single key press → small movement burst
+- Holding key      → continuous movement
+- Releasing key    → publish zero velocity instantly (after a 0.3s timeout)
 
-Key bindings (same as teleop_twist_keyboard):
-  w / x  → increase / decrease linear velocity
-  a / d  → rotate left / right
-  s      → stop immediately
+This ensures the robot does not run away and gives precise control. It natively
+publishes geometry_msgs/msg/TwistStamped to /cmd_vel, which is required by 
+the Gazebo Harmonic bridge.
+
+Key bindings:
+  i / w  → forward
+  , / x  → backward
+  j / a  → rotate left
+  l / d  → rotate right
+  k / s  → stop immediately
   q / z  → increase / decrease linear and angular speeds simultaneously
   e / c  → increase / decrease angular speed only
   Ctrl+C → exit
-
-Speed settings (adjustable at runtime):
-  Linear speed step : 0.01 m/s
-  Angular speed step: 0.1  rad/s
-  Linear  max: 0.22 m/s (TurtleBot3 Burger limit)
-  Angular max: 1.0  rad/s
-
-Note:
-  The node publishes TwistStamped (not Twist) because the Gazebo Sim bridge
-  for DiffDrive in Jazzy expects geometry_msgs/msg/TwistStamped on the
-  ROS side when using ros_gz_bridge.
 """
 
 from __future__ import annotations
@@ -34,6 +32,8 @@ import sys
 import tty
 import termios
 import threading
+import time
+import math
 
 import rclpy
 from rclpy.node import Node
@@ -43,36 +43,34 @@ from geometry_msgs.msg import TwistStamped
 # ─── Key mapping ──────────────────────────────────────────────────────────────
 
 MOVE_BINDINGS = {
-    'w': ( 1,  0),   # forward
-    'x': (-1,  0),   # backward
-    'a': ( 0,  1),   # rotate left
-    'd': ( 0, -1),   # rotate right
-    's': ( 0,  0),   # stop
+    'i': ( 1,  0),   ',': (-1,  0),   'j': ( 0,  1),   'l': ( 0, -1),   'k': ( 0,  0),
+    'w': ( 1,  0),   'x': (-1,  0),   'a': ( 0,  1),   'd': ( 0, -1),   's': ( 0,  0),
+    'I': ( 1,  0),   '<': (-1,  0),   'J': ( 0,  1),   'L': ( 0, -1),   'K': ( 0,  0),
+    'W': ( 1,  0),   'X': (-1,  0),   'A': ( 0,  1),   'D': ( 0, -1),   'S': ( 0,  0),
 }
 
 SPEED_BINDINGS = {
-    'q': (1.1,  1.1),   # increase both
-    'z': (0.9,  0.9),   # decrease both
-    'e': (1.0,  1.1),   # increase angular
-    'c': (1.0,  0.9),   # decrease angular
+    'q': (1.1,  1.1),   'z': (0.9,  0.9),   'e': (1.0,  1.1),   'c': (1.0,  0.9),
+    'Q': (1.1,  1.1),   'Z': (0.9,  0.9),   'E': (1.0,  1.1),   'C': (1.0,  0.9),
 }
 
 MSG = """
-╔══════════════════════════════════════╗
-║  TurtleBot3 Convoy — Teleop (tb1)   ║
-╠══════════════════════════════════════╣
-║  Movement:                           ║
-║    w        → forward                ║
-║    x        → backward               ║
-║    a / d    → rotate left / right   ║
-║    s        → stop                   ║
-╠══════════════════════════════════════╣
-║  Speed adjustment:                   ║
-║    q / z    → faster / slower        ║
-║    e / c    → angular faster/slower ║
-╠══════════════════════════════════════╣
-║  CTRL+C     → quit                   ║
-╚══════════════════════════════════════╝
+╔════════════════════════════════════════════════════╗
+║  TurtleBot3 Convoy — Burst-Mode Teleop (tb1)       ║
+╠════════════════════════════════════════════════════╣
+║  Movement (Hold to move, release to stop!):        ║
+║    i / w        → forward                          ║
+║    , / x        → backward                         ║
+║    j / a        → rotate left                      ║
+║    l / d        → rotate right                     ║
+║    k / s        → force stop                       ║
+╠════════════════════════════════════════════════════╣
+║  Speed adjustment:                                 ║
+║    q / z        → overall faster / slower          ║
+║    e / c        → angular faster / slower          ║
+╠════════════════════════════════════════════════════╣
+║  CTRL+C         → quit                             ║
+╚════════════════════════════════════════════════════╝
 """
 
 SPEED_MSG = "\rLinear: {lin:.2f} m/s  |  Angular: {ang:.2f} rad/s    "
@@ -99,11 +97,8 @@ def get_key(timeout: float = 0.1) -> str:
 
 class TeleopController(Node):
     """
-    Keyboard teleop node for Robot 1 (Leader).
-
-    Publishes TwistStamped to /tb1/cmd_vel.
-    The namespace /tb1 is set via the launch file so this node publishes
-    to cmd_vel which resolves to /tb1/cmd_vel.
+    Burst-mode keyboard teleop node for Robot 1 (Leader).
+    Publishes TwistStamped to cmd_vel.
     """
 
     def __init__(self) -> None:
@@ -130,37 +125,47 @@ class TeleopController(Node):
     def run(self) -> None:
         """Main loop: read keys and publish commands."""
         print(MSG)
-        print(SPEED_MSG.format(lin=self.linear_speed, ang=self.angular_speed))
+        print(SPEED_MSG.format(lin=self.linear_speed, ang=self.angular_speed), end='', flush=True)
 
         linear_x = 0.0
         angular_z = 0.0
+        last_key_time = time.time()
 
         try:
             while rclpy.ok() and self.running:
+                # Timeout must be shorter than the burst timeout
                 key = get_key(timeout=0.05)
+                now = time.time()
 
                 if key in MOVE_BINDINGS:
                     lin_dir, ang_dir = MOVE_BINDINGS[key]
                     linear_x  = lin_dir * self.linear_speed
                     angular_z = ang_dir * self.angular_speed
+                    last_key_time = now
 
                 elif key in SPEED_BINDINGS:
                     lin_mult, ang_mult = SPEED_BINDINGS[key]
                     self.linear_speed  = min(self.max_lin, self.linear_speed  * lin_mult)
                     self.angular_speed = min(self.max_ang, self.angular_speed * ang_mult)
-                    # Keep current motion direction, update magnitude
+                    
+                    # Apply new speed immediately if already moving
                     if linear_x != 0:
-                        linear_x = math.copysign(self.linear_speed,  linear_x)
+                        linear_x = math.copysign(self.linear_speed, linear_x)
                     if angular_z != 0:
                         angular_z = math.copysign(self.angular_speed, angular_z)
+                    
+                    last_key_time = now
                     print(SPEED_MSG.format(lin=self.linear_speed, ang=self.angular_speed), end='', flush=True)
 
                 elif key == '\x03':   # Ctrl+C
                     break
 
-                elif key == '':
-                    # No key pressed — hold current velocity
-                    pass
+                else:
+                    # Burst timeout logic: if no valid key pressed for > 0.3s, stop.
+                    # This overcomes the ~250ms OS typematic delay when a key is initially held.
+                    if (now - last_key_time) > 0.3:
+                        linear_x = 0.0
+                        angular_z = 0.0
 
                 self._publish_twist(linear_x, angular_z)
 
@@ -179,8 +184,6 @@ class TeleopController(Node):
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
-
-import math   # placed here to avoid circular import issues in module header
 
 def main(args=None) -> None:
     rclpy.init(args=args)
