@@ -7,6 +7,11 @@
 # follower → the namespace of this robot node
 #
 # Formation: tb1 (leader, teleoperated) → tb2 → tb3
+#
+# NOTE: This file is REFERENCE DOCUMENTATION ONLY.
+# It is NOT loaded by any launch file or ROS node at runtime.
+# The actual formation is configured directly in multi_robot.launch.py
+# via the make_robot_actions() calls.
 
 convoy:
   robots:

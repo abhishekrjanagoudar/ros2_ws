@@ -34,13 +34,13 @@ def generate_launch_description():
 
     use_rviz_arg = DeclareLaunchArgument(
         'use_rviz',
-        default_value='true',
-        description='Launch RViz2',
+        default_value='false',
+        description='Launch RViz2 (set true to enable)',
     )
     use_gui_arg = DeclareLaunchArgument(
         'use_gui',
         default_value='true',
-        description='Launch Gazebo GUI',
+        description='Launch Gazebo GUI (set false for headless/WSL)',
     )
 
     multi_robot_launch = IncludeLaunchDescription(

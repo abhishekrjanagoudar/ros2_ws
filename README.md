@@ -1,147 +1,184 @@
-# Multi-Robot TurtleBot3 Leader–Follower System
+# 🤖 multi_tb3_system
 
-<div align="center">
-  <h3>Multi-Robot TurtleBot3 Burger Leader–Follower System with LiDAR-Based Target and Obstacle Differentiation</h3>
-  <p>
-    <strong>Hochschule Darmstadt - University of Applied Sciences</strong><br>
-    <em>Under the guidance of Prof. Dr.-Ing. Karl Kleinmann</em>
-  </p>
-</div>
+The `multi_tb3_system` package implements a **multi-robot TurtleBot3 Burger convoy** in Gazebo Sim (Harmonic) using ROS 2 Jazzy. Robot 1 is teleoperated; Robots 2 and 3 autonomously follow the robot ahead using LiDAR (LaserScan) clustering. A safety layer prevents collisions.
 
-<hr>
+> **University Assignment** — Hochschule Darmstadt · Under guidance of Prof. Dr.-Ing. Karl Kleinmann
 
-## 🎯 Overview
-This project implements a ROS 2 based multi-robot system using **TurtleBot3 Burger** robots in a **Gazebo simulation environment**.
-The system consists of multiple robots operating in a coordinated convoy formation. The first robot is manually controlled (teleoperated), while the subsequent robots autonomously follow the preceding robot using **LiDAR (LaserScan)** data.
-
-A key feature of this project is the follower robots' ability to reliably distinguish between the leading TurtleBot3 Burger (a dynamic moving target) and static environmental objects (such as columns or pillars), using only onboard sensor data.
-
-## ✨ Key Features
-- **Teleoperated Leader:** Robot 1 is controlled manually.
-- **Autonomous Followers:** Robots 2 and 3 dynamically track and follow the robot immediately ahead.
-- **LiDAR-based Target Classification:** Differentiates between moving targets (leader) and static obstacles (walls, columns) using LaserScan data.
-- **Safe Convoy Navigation:** Maintains safe inter-robot spacing and velocity control to prevent collisions.
-- **Custom Gazebo Environments:** Includes an empty world for baseline testing and an obstacle world with static columns.
+---
 
 ## 📋 Prerequisites
-- **OS:** Ubuntu 24.04
-- **ROS 2:** Jazzy Jalisco
-- **Gazebo:** Compatible simulator for ROS 2 Jazzy
 
-### Install Dependencies
-Install the required TurtleBot3 packages for ROS 2 Jazzy:
+| Requirement | Version |
+|---|---|
+| OS | Ubuntu 24.04 LTS |
+| ROS 2 | Jazzy Jalisco |
+| Gazebo | Harmonic (via `ros_gz`) |
+| TurtleBot3 Model | `burger` |
+
 ```bash
-sudo apt update
-sudo apt install -y ros-jazzy-turtlebot3 ros-jazzy-turtlebot3-simulations ros-jazzy-turtlebot3-teleop ros-jazzy-turtlebot3-gazebo
+sudo apt install -y \
+  ros-jazzy-turtlebot3 ros-jazzy-turtlebot3-simulations \
+  ros-jazzy-turtlebot3-gazebo ros-jazzy-turtlebot3-teleop \
+  ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge ros-jazzy-ros-gz-sim \
+  ros-jazzy-rviz2 ros-jazzy-xacro ros-jazzy-tf2-tools
+
+echo "export TURTLEBOT3_MODEL=burger" >> ~/.bashrc && source ~/.bashrc
 ```
 
-Ensure your TurtleBot3 model is set to Burger:
-```bash
-echo "export TURTLEBOT3_MODEL=burger" >> ~/.bashrc
-source ~/.bashrc
-```
+---
 
-## 🛠️ Build & Installation
-1. Clone the repository into your ROS 2 workspace (e.g., `~/ros2_ws/src`):
-```bash
-mkdir -p ~/ros2_ws/src
-cd ~/ros2_ws/src
-# Clone your repo here
-```
-2. Build the workspace:
+## 🛠️ Build
+
 ```bash
 cd ~/ros2_ws
-colcon build --packages-select multi_tb3_system
-```
-3. Source the setup file:
-```bash
+colcon build --symlink-install --packages-select multi_tb3_system
 source install/setup.bash
 ```
 
-## 🚀 Quick Start / Usage
+---
 
-### 1. Launch the Simulation Environment
-You can launch the system in either an empty world or a world with obstacles. **Note: RViz2 will start automatically by default.**
+## 🚀 Quick Start
 
-**Option A: Empty World (Baseline Formation Testing)**
+### 1. Launch the Simulation
+
 ```bash
 ros2 launch multi_tb3_system world_empty.launch.py
 ```
 
-**Option B: Obstacle World (Columns Environment)**
-```bash
-ros2 launch multi_tb3_system world_obstacles.launch.py
-```
+> Opens Gazebo with 3 TurtleBot3 robots (tb1 at origin, tb2 at −1 m, tb3 at −2 m). Follower nodes for tb2 and tb3 start automatically.
 
-**Option C: Main Multi-Robot Launch**
-```bash
-ros2 launch multi_tb3_system multi_robot.launch.py
-```
+### 2. Teleoperate the Leader (tb1)
 
-**Running Headless (WSL 2 or No Display)**
-If you are running in WSL or a headless environment and experience OpenGL/GUI errors, you can disable the Gazebo 3D GUI while keeping the simulation and RViz running:
-```bash
-ros2 launch multi_tb3_system world_empty.launch.py use_gui:=false
-```
+In a new terminal:
 
-### 2. Teleoperate the Leader Robot
-In a new terminal, source your workspace and run the custom **Burst-Mode** teleop controller to move the leader robot (Robot 1):
 ```bash
 source ~/ros2_ws/install/setup.bash
-ros2 run multi_tb3_system teleop_controller.py
+ros2 run multi_tb3_system teleop_controller.py --ros-args -r __ns:=/tb1
 ```
 
-> **💡 Burst / Hold-to-Move Mode:**
-> Unlike the standard `teleop_twist_keyboard` (which causes continuous movement after a single key press), this project uses a custom teleop node. The robot will **only move while the key is held down** and will immediately stop when the key is released. This provides much finer control and safety when testing convoy behaviors. It also natively publishes the `geometry_msgs/msg/TwistStamped` messages required by Gazebo Harmonic.
+> **Hold a key** to move — releasing stops the robot immediately (burst-mode teleop).
+>
+> `i/w` → forward &nbsp;|&nbsp; `,/x` → backward &nbsp;|&nbsp; `j/a` → rotate left &nbsp;|&nbsp; `l/d` → rotate right &nbsp;|&nbsp; `k/s` → stop
 
-### 3. Run Follower Logic (If not automatically started)
-If you need to manually start the follower and safety nodes:
+---
+
+## ⚙️ Launch Files
+
+### `world_empty.launch.py` — Empty world (baseline)
+
 ```bash
-ros2 run multi_tb3_system laser_processor.py
-ros2 run multi_tb3_system follower_node.py
-ros2 run multi_tb3_system safety_controller.py
+ros2 launch multi_tb3_system world_empty.launch.py [args]
 ```
 
-## ⚠️ Troubleshooting
+### `world_obstacles.launch.py` — Columns world (obstacle rejection test)
 
-**Robot Not Moving in Gazebo?**
-If the teleoperated robot refuses to move, it is likely a message type mismatch. Gazebo Harmonic expects `geometry_msgs/msg/TwistStamped`, but default teleop nodes use `geometry_msgs/msg/Twist`.
+```bash
+ros2 launch multi_tb3_system world_obstacles.launch.py [args]
+```
 
-1. Check the `/cmd_vel` message type:
-   ```bash
-   ros2 topic info /cmd_vel --verbose
-   ```
-2. Ensure your teleop node publishes `geometry_msgs/msg/TwistStamped`. The included `teleop_controller.py` handles this automatically, but if you attempt to use the standard `teleop_twist_keyboard`, you must append `--ros-args -p stamped:=true`.
+### `multi_robot.launch.py` — Master launch (called by the above)
 
-## ⚙️ Configuration
-The system behavior can be tuned via the configuration files located in the `src/multi_tb3_system/config/` directory.
+```bash
+ros2 launch multi_tb3_system multi_robot.launch.py world:=empty [args]
+```
+
+---
+
+## ⚙️ Launch Arguments
+
+All three launch files accept the following arguments:
+
+### 1. `world`  *(multi_robot.launch.py only)*
+
+Selects the Gazebo world:
+
+- `empty` *(default)*: Flat ground plane, no obstacles. Best for formation testing.
+- `columns`: 6 static cylindrical pillars arranged as a slalom course. Tests obstacle rejection.
+
+---
+
+### 2. `use_gui`
+
+Controls the Gazebo graphical client:
+
+- `true` *(default)*: Launches the Gazebo GUI (3D viewer).
+- `false`: Headless — Gazebo runs without a window. **Required for WSL 2 or servers without a display.**
+
+---
+
+### 3. `use_rviz`
+
+Controls RViz2 visualization:
+
+- `false` *(default)*: RViz is not launched.
+- `true`: Launches RViz2 with pre-configured multi-robot display (LaserScan + Odometry for all 3 robots).
+
+---
+
+### 🧪 Examples
+
+```bash
+# Empty world, headless, no RViz
+ros2 launch multi_tb3_system world_empty.launch.py use_gui:=false
+
+# Obstacle world with RViz
+ros2 launch multi_tb3_system world_obstacles.launch.py use_rviz:=true
+
+# Full display: Gazebo GUI + RViz
+ros2 launch multi_tb3_system world_empty.launch.py use_gui:=true use_rviz:=true
+```
+
+---
+
+## 🗂️ Topic Map
+
+| ROS Topic | Type | Direction | Description |
+|---|---|---|---|
+| `/tb1/cmd_vel` | `Twist` | → Gazebo | Leader velocity command |
+| `/tb2/cmd_vel` | `Twist` | → Gazebo | Follower 1 velocity command |
+| `/tb3/cmd_vel` | `Twist` | → Gazebo | Follower 2 velocity command |
+| `/tbX/scan` | `LaserScan` | Gazebo → | Per-robot LiDAR data |
+| `/tbX/odom` | `Odometry` | Gazebo → | Per-robot wheel odometry |
+| `/tbX/joint_states` | `JointState` | Gazebo → | Per-robot wheel joint states |
+| `/tf` | `TFMessage` | Gazebo → | All robot transforms (odom → base_footprint) |
+| `/clock` | `Clock` | Gazebo → | Simulation time |
+
+> ⚠️ The bridge uses standard `geometry_msgs/Twist` on the ROS side. Always publish `Twist` to `/tbX/cmd_vel`.
+
+---
+
+## 🏗️ Node Architecture
+
+| Node | Script | Namespace | Role |
+|---|---|---|---|
+| `teleop_controller` | `teleop_controller.py` | `/tb1` | Keyboard control for the leader |
+| `follower_node` | `follower_node.py` | `/tb2`, `/tb3` | Autonomous LiDAR-based following |
+| `laser_processor` | `laser_processor.py` | *(library)* | LaserScan → Cartesian clustering |
+| `safety_controller` | `safety_controller.py` | *(library)* | Velocity limits + emergency stop |
+
+---
+
+## 🔧 Configuration
 
 ### `config/follower_params.yaml`
-Adjusts the tracking parameters, safe distance, and velocity limits for the follower robots.
-```yaml
-follower_node:
-  ros__parameters:
-    safe_distance: 0.5      # Target distance to maintain from the leader (meters)
-    max_velocity: 0.22      # Maximum linear velocity (m/s)
-    cluster_tolerance: 0.1  # Distance tolerance for LiDAR clustering
-```
 
-### `config/robot_ids.yaml`
-Configures the namespaces and relationships between the robots in the convoy.
-```yaml
-robots:
-  - id: "tb1"
-    role: "leader"
-  - id: "tb2"
-    role: "follower"
-    target: "tb1"
-  - id: "tb3"
-    role: "follower"
-    target: "tb2"
-```
+| Parameter | Default | Unit | Description |
+|---|---|---|---|
+| `target_distance` | `0.7` | m | Desired gap to robot ahead |
+| `safe_distance` | `0.4` | m | Emergency stop threshold |
+| `kp_linear` | `0.8` | — | Linear proportional gain |
+| `kp_angular` | `2.0` | — | Angular proportional gain |
+| `max_linear_velocity` | `0.22` | m/s | Hard velocity ceiling |
+| `max_angular_velocity` | `1.0` | rad/s | Hard angular velocity ceiling |
+| `front_angle_deg` | `30.0` | deg | Front cone half-angle for LiDAR filtering |
+| `cluster_distance` | `0.20` | m | Max gap between points in same cluster |
+| `min_cluster_size` | `2` | pts | Minimum cluster size (below = noise) |
+| `max_cluster_size` | `40` | pts | Maximum cluster size (above = wall) |
 
-## 🏗️ System Architecture (Nodes)
-- **`teleop_controller.py`**: Manual control node for the leader robot.
-- **`follower_node.py`**: Core logic for autonomous following, computing command velocities based on the identified target.
-- **`laser_processor.py`**: Processes raw LiDAR (`/scan`) data, performs clustering, and classifies points as either dynamic targets (leader) or static obstacles.
-- **`safety_controller.py`**: Monitors distances and enforces velocity limits to prevent collisions.
+---
+
+## Notes
+
+1. **TF frames**: All robots share the same `odom` and `base_footprint` frame names as published by Gazebo's DiffDrive plugin. This is by design — do not set `frame_prefix` in `robot_state_publisher`.
+2. **Headless / WSL 2**: Always pass `use_gui:=false` if your system has no display or you encounter OpenGL errors.
+3. **`robot_ids.yaml`**: This file is reference documentation only. It is not loaded at runtime — convoy configuration is in `multi_robot.launch.py`.

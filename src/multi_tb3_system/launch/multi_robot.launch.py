@@ -12,9 +12,9 @@ Starts:
        tb2 at t=3s  (x=-1.0, y=0.0)
        tb3 at t=6s  (x=-2.0, y=0.0)
   4. Per-robot nodes:
-       - robot_state_publisher  (in namespace /tbX)
-       - ros_gz_bridge          (scan, odom, cmd_vel, joint_states)
-  5. Follower nodes for tb2 and tb3
+       - robot_state_publisher  (in namespace /tbX, no frame_prefix)
+       - ros_gz_bridge          (scan, odom, tf, cmd_vel, joint_states)
+  5. Follower nodes for tb2 and tb3 (with use_sim_time=true)
 
 Launch arguments:
   world    : 'empty' or 'columns' (default: empty)
@@ -22,10 +22,12 @@ Launch arguments:
   use_gui  : 'true'/'false'        (default: true)
 
 Topic mapping after bridging:
-  /tbX/scan      - LaserScan from Gazebo (/model/tbX/scan)
-  /tbX/odom      - Odometry  from Gazebo (/model/tbX/odometry)
-  /tbX/cmd_vel   - Velocity  to   Gazebo (/model/tbX/cmd_vel)
-  /clock         - Sim clock from Gazebo
+  /tbX/scan        - LaserScan  from Gazebo (/model/tbX/scan)
+  /tbX/odom        - Odometry   from Gazebo (/model/tbX/odom)
+  /tf              - TF         from Gazebo (/model/tbX/tf)  [all robots → /tf]
+  /tbX/cmd_vel     - Velocity   to   Gazebo (/model/tbX/cmd_vel)
+  /tbX/joint_states- JointState from Gazebo (/model/tbX/joint_states)
+  /clock           - Sim clock  from Gazebo
 
 RECOMMENDED TELEOP (Burst-Mode):
   To teleoperate tb1 safely with "Hold-To-Move" functionality (stops immediately on release),
@@ -33,7 +35,7 @@ RECOMMENDED TELEOP (Burst-Mode):
   ros2 run multi_tb3_system teleop_controller.py
 
 TROUBLESHOOTING:
-  - Check /cmd_vel types using: ros2 topic info /cmd_vel --verbose
+  - Check /cmd_vel types using: ros2 topic info /tb1/cmd_vel --verbose
   - Ensure teleop publishes geometry_msgs/msg/TwistStamped
 """
 
@@ -46,7 +48,6 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
     TimerAction,
-    GroupAction,
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -59,11 +60,6 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
-# ─── Constants ────────────────────────────────────────────────────────────────
-
-# Gazebo world name is embedded inside the .world XML
-# (world name="empty_convoy" / "columns_world") — but we load by file path.
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def read_urdf() -> str:
@@ -75,8 +71,8 @@ def read_urdf() -> str:
 
 
 def burger_sdf_path() -> str:
-    """Path to the unmodified turtlebot3_burger model.sdf."""
-    pkg = get_package_share_directory('turtlebot3_gazebo')
+    """Path to the locally modified turtlebot3_burger model.sdf for Gazebo Harmonic."""
+    pkg = get_package_share_directory('multi_tb3_system')
     return os.path.join(pkg, 'models', 'turtlebot3_burger', 'model.sdf')
 
 
@@ -93,10 +89,10 @@ def make_robot_actions(
     Return a list of launch actions for one robot (no timing — caller wraps).
 
     Actions:
-      - ros_gz_sim create   : spawn the robot model in Gazebo
-      - robot_state_publisher : publish TF from URDF
-      - ros_gz_bridge         : bridge scan / odom / cmd_vel
-      - follower_node (optional)
+      - ros_gz_sim create    : spawn the robot model in Gazebo
+      - robot_state_publisher: publish TF from URDF joint states
+      - ros_gz_bridge        : bridge scan / odom / tf / cmd_vel / joint_states
+      - follower_node (optional, for tb2 and tb3 only)
     """
 
     # ── Spawn ─────────────────────────────────────────────────────────────────
@@ -116,6 +112,13 @@ def make_robot_actions(
     )
 
     # ── robot_state_publisher ─────────────────────────────────────────────────
+    # NOTE: frame_prefix is intentionally left empty ('').
+    # The TurtleBot3 Burger SDF DiffDrive plugin hardcodes:
+    #   <frame_id>odom</frame_id>  <child_frame_id>base_footprint</child_frame_id>
+    # Setting frame_prefix here would produce tb1/base_footprint etc., which
+    # would NOT match the odom→base_footprint TF broadcast from Gazebo,
+    # breaking the TF tree. All three robots share the same frame names in
+    # Gazebo Sim; only the model namespaces differ for topics.
     rsp = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -124,24 +127,24 @@ def make_robot_actions(
         parameters=[{
             'use_sim_time':      True,
             'robot_description': urdf,
-            'frame_prefix':      f'{ns}/',
+            'frame_prefix':      '',
         }],
         output='screen',
     )
 
     # ── ros_gz_bridge ─────────────────────────────────────────────────────────
     # When Gazebo spawns model named "tbX", it publishes:
-    #   /model/tbX/scan            (LaserScan — from the sensor topic in model.sdf)
-    #   /model/tbX/odometry        (Odometry)
-    #   /model/tbX/cmd_vel         (receives Twist)
-    #   /world/default/model/tbX/joint_state  (JointState)
-    #   /model/tbX/tf              (TF)
+    #   /model/tbX/scan         (LaserScan  — sensor topic "scan" in SDF)
+    #   /model/tbX/odom         (Odometry   — odom_topic "odom" in SDF DiffDrive)
+    #   /model/tbX/tf           (TFMessage  — tf_topic "/tf" in SDF, but scoped
+    #                                         to model namespace in Gz Harmonic)
+    #   /model/tbX/cmd_vel      (receives Twist from bridge)
+    #   /model/tbX/joint_states (JointState — topic "joint_states" in SDF plugin)
     #
-    # Note: The sensor topic in the SDF is "scan". Gazebo Sim prepends /model/<name>/
-    # automatically when using the default (non-absolute) topic name in the SDF sensor.
-    #
-    # We bridge each Gz topic and remap to /tbX/* on the ROS side.
-
+    # Bridge direction notation:
+    #   @  = bidirectional
+    #   [  = Gazebo → ROS only
+    #   ]  = ROS → Gazebo only
     bridge_node = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -153,26 +156,38 @@ def make_robot_actions(
             + '[gz.msgs.LaserScan',
 
             # Odometry: Gazebo → ROS
-            f'/model/{ns}/odometry'
+            # FIX [1]: SDF odom_topic is "odom" → Gz publishes /model/tbX/odom
+            #          (was incorrectly /model/tbX/odometry)
+            f'/model/{ns}/odom'
             + '@nav_msgs/msg/Odometry'
             + '[gz.msgs.Odometry',
 
-            # cmd_vel: ROS → Gazebo  (TwistStamped on ROS side, Twist on Gz side)
+            # TF: Gazebo → ROS
+            # FIX [3]: Added missing TF bridge — without this, no odom→base_footprint
+            #          transform reaches ROS and RViz shows nothing.
+            f'/model/{ns}/tf'
+            + '@tf2_msgs/msg/TFMessage'
+            + '[gz.msgs.Pose_V',
+
+            # cmd_vel: ROS → Gazebo  (Twist on ROS side, Twist on Gz side)
             f'/model/{ns}/cmd_vel'
-            + '@geometry_msgs/msg/TwistStamped'
+            + '@geometry_msgs/msg/Twist'
             + ']gz.msgs.Twist',
 
             # JointStates: Gazebo → ROS
-            f'/world/default/model/{ns}/joint_state'
+            # FIX [2]: SDF joint_states topic is "joint_states" → Gz publishes
+            #          /model/tbX/joint_states (was incorrectly /world/default/…)
+            f'/model/{ns}/joint_states'
             + '@sensor_msgs/msg/JointState'
             + '[gz.msgs.Model',
         ],
         remappings=[
             # Map Gazebo namespaced topics to clean /tbX/* ROS topics
-            (f'/model/{ns}/scan',                          f'/{ns}/scan'),
-            (f'/model/{ns}/odometry',                      f'/{ns}/odom'),
-            (f'/model/{ns}/cmd_vel',                       f'/{ns}/cmd_vel'),
-            (f'/world/default/model/{ns}/joint_state',     f'/{ns}/joint_states'),
+            (f'/model/{ns}/scan',         f'/{ns}/scan'),
+            (f'/model/{ns}/odom',         f'/{ns}/odom'),          # FIX [1]
+            (f'/model/{ns}/tf',           '/tf'),                   # FIX [3]: all robots → shared /tf
+            (f'/model/{ns}/cmd_vel',      f'/{ns}/cmd_vel'),
+            (f'/model/{ns}/joint_states', f'/{ns}/joint_states'),   # FIX [2]
         ],
         output='screen',
     )
@@ -186,7 +201,10 @@ def make_robot_actions(
             executable='follower_node.py',
             name='follower_node',
             namespace=ns,
-            parameters=[params],
+            # FIX [8]: Added use_sim_time=True so the node uses /clock from Gazebo.
+            # Without this, header.stamp is wall-clock time while the sim
+            # runs on simulation time, causing QoS and timing mismatches.
+            parameters=[params, {'use_sim_time': True}],
             output='screen',
         )
         actions.append(follower)
@@ -240,7 +258,7 @@ def generate_launch_description() -> LaunchDescription:
             os.path.join(ros_gz_sim_pkg, 'launch', 'gz_sim.launch.py')
         ),
         launch_arguments={
-            'gz_args':        ['-r -s -v2 ', world_file],
+            'gz_args':          ['-r -s -v2 ', world_file],
             'on_exit_shutdown': 'true',
         }.items(),
     )
@@ -251,7 +269,7 @@ def generate_launch_description() -> LaunchDescription:
             os.path.join(ros_gz_sim_pkg, 'launch', 'gz_sim.launch.py')
         ),
         launch_arguments={
-            'gz_args':        '-g -v2 ',
+            'gz_args':          '-g -v2 ',
             'on_exit_shutdown': 'true',
         }.items(),
         condition=IfCondition(use_gui),

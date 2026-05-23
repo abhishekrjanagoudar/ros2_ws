@@ -10,7 +10,7 @@ correctly without any hard-coded robot names in this file.
 
 Architecture:
   - Subscribes to: /scan  (LaserScan — relative to this robot's namespace)
-  - Publishes to:  /cmd_vel (TwistStamped — relative to this robot's namespace)
+  - Publishes to:  /cmd_vel (Twist — relative to this robot's namespace)
 
 Algorithm (simple geometry, no temporal tracking):
   1. Receive LaserScan
@@ -48,7 +48,7 @@ import os
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 
 # Import sibling modules from scripts directory
@@ -118,13 +118,12 @@ class FollowerNode(Node):
 
         # ── Publisher: /cmd_vel ─────────────────────────────────────────────
         self.cmd_pub = self.create_publisher(
-            TwistStamped,
+            Twist,
             'cmd_vel',  # resolved to /tbX/cmd_vel via namespace
             10,
         )
 
         # ── State ───────────────────────────────────────────────────────────
-        self._last_scan: LaserScan | None = None
         self._no_target_count: int = 0   # frames without a target
 
         self.get_logger().info(
@@ -230,11 +229,10 @@ class FollowerNode(Node):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _publish_twist(self, linear_x: float, angular_z: float) -> None:
-        """Publish a TwistStamped message (required by Gazebo Sim bridge)."""
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.twist.linear.x  = float(linear_x)
-        msg.twist.angular.z = float(angular_z)
+        """Publish a Twist message (required by Gazebo Sim bridge)."""
+        msg = Twist()
+        msg.linear.x  = float(linear_x)
+        msg.angular.z = float(angular_z)
         self.cmd_pub.publish(msg)
 
 

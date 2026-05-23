@@ -16,9 +16,8 @@ This module does NOT do any target tracking; it purely enforces hard limits.
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
-from geometry_msgs.msg import TwistStamped, Twist
 
 
 # ─── Constants ────────────────────────────────────────────────────────────────
