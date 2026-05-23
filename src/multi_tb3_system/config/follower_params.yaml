@@ -1,0 +1,47 @@
+# follower_params.yaml
+# ====================
+# Parameters for the autonomous follower node (follower_node.py).
+# Used for both tb2 (follows tb1) and tb3 (follows tb2).
+#
+# Loaded at launch time via --params-file argument.
+# All distances are in metres, velocities in m/s, angles in degrees.
+
+follower_node:
+  ros__parameters:
+
+    # ── Following behaviour ──────────────────────────────────────────────────
+    # Target separation distance to maintain from the robot ahead [m]
+    target_distance: 0.7
+
+    # Hard-stop distance: stop if anything is closer than this in front [m]
+    safe_distance: 0.4
+
+    # ── Proportional control gains ────────────────────────────────────────────
+    # Linear gain: linear_vel = kp_linear * (distance - target_distance)
+    kp_linear: 0.8
+
+    # Angular gain: angular_vel = kp_angular * (angle_to_target)
+    kp_angular: 2.0
+
+    # ── Velocity limits ───────────────────────────────────────────────────────
+    # Hard ceiling for linear velocity output [m/s]
+    # TurtleBot3 Burger max is 0.22 m/s
+    max_linear_velocity: 0.22
+
+    # Hard ceiling for angular velocity output [rad/s]
+    max_angular_velocity: 1.0
+
+    # ── LiDAR perception parameters ──────────────────────────────────────────
+    # Half-angle of the front cone used for target detection [degrees]
+    # Only LiDAR points within ±front_angle_deg of straight-ahead are used
+    front_angle_deg: 30.0
+
+    # Maximum distance gap between consecutive points to be in the same cluster [m]
+    cluster_distance: 0.20
+
+    # Minimum number of LiDAR points for a valid cluster (below → noise, rejected)
+    min_cluster_size: 2
+
+    # Maximum number of LiDAR points in a valid cluster (above → wall, rejected)
+    # TurtleBot3 Burger body subtends ~8-12 points at 0.7m; walls subtend 50+
+    max_cluster_size: 40

@@ -1,0 +1,207 @@
+<?xml version="1.0"?>
+<!--
+  columns.world — world with static cylindrical obstacles for obstacle rejection testing
+  Contains 6 static columns/pillars arranged around the convoy area.
+  Used for ROS 2 Jazzy + Gazebo Sim (Harmonic)
+-->
+<sdf version="1.8">
+  <world name="columns_world">
+
+    <!-- Physics -->
+    <physics type="ode">
+      <real_time_update_rate>1000.0</real_time_update_rate>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <!-- Required system plugins -->
+    <plugin filename="gz-sim-physics-system"     name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"     name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"         name="gz::sim::systems::Imu"/>
+
+    <!-- Lighting -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         Static Columns (Pillars) — 6 obstacles
+         Arranged as a slalom course around (3,0)
+         Height: 1.0m, Radius: 0.1m
+         ═══════════════════════════════════════════ -->
+
+    <!-- Column 1: front-left -->
+    <model name="column_1">
+      <static>true</static>
+      <pose>2.0 0.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>1.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>1.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Column 2: front-right -->
+    <model name="column_2">
+      <static>true</static>
+      <pose>2.0 -0.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Column 3: mid-left -->
+    <model name="column_3">
+      <static>true</static>
+      <pose>3.5 0.6 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Column 4: mid-right -->
+    <model name="column_4">
+      <static>true</static>
+      <pose>3.5 -0.6 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Column 5: far-left -->
+    <model name="column_5">
+      <static>true</static>
+      <pose>5.0 0.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Column 6: far-right -->
+    <model name="column_6">
+      <static>true</static>
+      <pose>5.0 -0.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.1</radius><length>1.0</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.8 1</ambient>
+            <diffuse>0.4 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

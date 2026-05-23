@@ -1,0 +1,1719 @@
+ROS for Robotic Systems Engineering
+
+• „Primer“
+− Why ROS?
+− Course „Fine Print“
+− Installation
+− Linux Intro
+− Python Intro
+− VS Code with AI
+− Turtlebot
+− Docker
+− Git, GitHub
+
+Lecture Notes v26.114
+
+• ROS == ROS2
+− ROS :: Ressources
+− ROS :: Fundamentals
+− ROS :: turtlesim
+− ROS :: First Program {create_subscription, create_publisher}
+− ROS :: Services
+− ROS :: bag
+− ROS :: Actions
+− ROS :: Second Program {custom action}
+− ROS :: rviz
+− ...
+
+• Lab Info
+− Lab 1
+− Lab 2
+− Lab 3
+
+3
+
+Why ROS ?
+5
+
+⇑
+
+Why ROS ?
+
+• Industry Standard & Employability
+
+− most top-tier robotics companies use ROS2
+− „must have“ skill on resume for internships and full-time roles
+
+• Hardware Independence
+
+− write code that can be easily ported between robots
+− learn on a cheap TurtleBot, apply skills to a big industrial system
+
+• Massive Community & Ecosystem
+
+− don‘t reinvent
+− access pre-built packages for mapping, navigation, planning, computer vision
+
+• Advanced Middleware
+
+− ROS2 uses Data Distribution Service (DDS)
+− teaches how modern distributed systems handle real-time communication and
+data security across multiple computers
+
+• Simulation Mastery
+
+− integrates with simulators like Gazebo and Isaac Sim
+− test complex AI and control algorithms in a virtual world before risking expensive hardware
+6
+
+Why ROS ?
+
+7
+
+Why ROS ?
+
+8
+
+Course „Fine Print“
+10
+
+⇑
+
+Course „Fine Print“
+
+• New Elective for Major „Automation“
+
+− 2026 first time
+− schedule made for 8-12 students (y1)
+
+• 40+ Students registered
+
+− lecture/lab/prep/homework/exam „as we move along“
+
+Goal of this Elective:
+Enjoyable Learning Experience
+ ROS2
+ Python / C++
+ Linux
+
+11
+
+Why Python?
+
+12
+
+Installation
+14
+
+⇑
+
+Installation :: Linux
+
+• Ubuntu 22.04 „Jammy Jellyfish“
+• Windows
+o WSL
+o VM
+
+− VM VirtualBox
+− VMware
+− Hyper-V
+
+o Dual-Boot
+o Connect to remote server
+
+Check if everything works fine ...
+
+15
+
+Installation :: Linux :: Installation of VirtualBox
+
+• https://www.virtualbox.org/wiki/Downloads
+
+− install VirtualBox (use pre-selected settings; ignore Python and win32api installer warnings)
+
+• download VirtualBox appliace ROS-VM.ova from ROS Moodle course
+• import ROS-VM.ova appliance via VirtualBox Manager
+− keep pre-selected settings
+
+• start VM
+
+− account ros-admin, password student
+
+• continue with slides on ROS Fundamentals
+
+16
+
+Robotics Back-End :: ROS2 Tutorial 1,2
+
+Installation :: ROS2
+• ROS Distributions
+https://docs.ros.org/en/rolling/Releases.html
+• ROS2 „Humble“
+https://docs.ros.org/en/humble/index.html
+o Installation -> Binary Packages -> deb packages
+https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html
+− Set Locale
+− Setup Sources
+− Install ROS2 Packages
+ Desktop Install $ sudo apt install ros-humble-desktop
+− Environment Setup
+$ source /opt/ros/humble/setup.bash
+ hint: add this as last line to ~/.bashrc (via gedit, nano, vim)
+− Try Examples
+$ ros2 run demo_nodes_cpp talker (1st shell)
+$ ros2 run demo_nodes_cpp listener (2nd shell)
+$ rqt_graph (3rd shell)
+$ ros2 run turtlesim turtlesim_node (1st shell)
+$ ros2 run turtlesim turtle_teleop_key (2nd shell)
+24
+
+• Install Build Tool colcon
+$ sudo apt update
+$ sudo apt install python3-colcon-common-extensions (confirm „yes“)
+$ source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
+• Create ROS2 Workspace
+$ cd ~
+$ mkdir ros2_ws
+$ cd ros2_ws
+$ mkdir src
+$ colcon build
+$ cd install
+$ source ~/ros2_ws/install/setup.bash
+
+ hint: add this line to ~/.bashrc
+
+ hint: add this as last line to ~/.bashrc
+
+• Complete the Toolchain: Create ROS2 Package
+$ cd ~/ros2_ws/src
+$ ros2 pkg create my_rob_controller --build-type ament_python --dependencies rclpy
+
+25
+
+Robotics Back-End :: ROS2 Tutorial 3,4
+
+Installation :: ROS2
+
+Robotics Back-End :: ROS2 Tutorial 4,5
+
+Installation :: VS Code
+• Install VS Code
+$ sudo snap install code --classic
+$ cd ~/ros2_ws/src
+$ code . (I trust)
+$ cd ~/ros2_ws
+$ colcon build (in case of error: $ sudo apt install python3-pip; pip3 list | grep setuptools and check version)
+• Complete the Toolchain: Create ROS2 Node
+$ cd ~/ros2_ws/src/my_rob_controller/my_rob_controller
+$ touch my_first_node.py
+$ chmod +x my_first_node.py
+$ cd ~/ros2_ws/src
+$ code .
+o Install Python extension in VS Code (and ROS extension?)
+− check for auto-completion
+− ROS extension from Microsoft deprecated!?!
+o Edit my_first_node.py in VS Code
+• Run my_first_node.py
+$ cd ~/ros2_ws/src/my_rob_controller/my_rob_controller
+$ ./my_first_node.py
+
+26
+
+Robotics Back-End :: ROS2 Tutorial 5
+
+Installation :: VS Code
+• Install the node (create entry point)
+• open setup.py in ~/ros2_ws/src/my_rob_controller
+• edit setup.py: add executable name and path
+
+• Build and run
+$ cd ~/ros2_ws
+$ colcon build
+$ source ~/.bashrc
+$ ros2 run my_rob_controller test_node
+ Executable Name: test_node
+ File Name: my_first_node.py
+ Node Name: first_node
+Node with Callback 1sec :
+27
+
+Linux Intro
+28
+
+⇑
+
+Linux Intro :: Overview
+
+− Ressources
+− Terminal vs. Shell
+− Commands
+− Environment Variables
+− Shell Scripting
+− ...
+
+29
+
+Linux Intro
+Ressources
+30
+
+⇑
+
+Linux Intro :: Ressources
+
+31
+
+Linux Intro
+Terminal vs. Shell
+33
+
+⇑
+
+Linux Intro :: Terminal vs. Shell
+
+34
+
+Linux Intro
+Commands
+35
+
+⇑
+
+Linux Intro :: Commands
+• Navigating the File System
+• File and Directory Management
+• File Permissions
+• Administrative Power
+• Advanced Tools (find, grep, pipes)
+• Output Redirections(>,>>)
+• Reading Files on Screen
+• Essential Shortcuts
+• Text Editors
+• Secure Shell (ssh)
+• ...
+
+user@machine~$ ls -lax
+36
+
+Linux Intro :: Commands :: Navigating the File System / File and Directory Management
+
+ls
+
+lists directory contents (use ls -la flags for details)
+
+cd
+
+changes the current directory; cd .. goes one level up; cd „goes home“
+
+pwd
+
+prints the full path of the current working directory
+
+mkdir
+
+makes a new directory
+
+rm
+
+removes (deletes) files or directories (rm –r for folders)
+
+cp
+
+copies files or directories
+
+mv
+
+moves or renames files or directories
+
+touch
+
+creates an empty file
+
+37
+
+Linux Intro :: Commands :: Navigating the File System / File and Directory Management
+
+38
+
+Linux Intro :: Commands :: Navigating the File System / File and Directory Management
+
+39
+
+Linux Intro :: Commands :: File Permissions
+
+chmod
+
+changes „mode“
+modifies file permissions
+40
+
+Linux Intro :: Commands :: File Permissions
+
+chown
+
+changes owner of file/dir
+
+chgrp
+
+changes group of file/dir
+
+41
+
+Linux Intro :: Commands :: File Permissions
+
+chmod with the numeric (octal) method
+
+42
+
+Linux Intro :: Commands :: File Permissions
+
+chmod with the numeric (octal) method
+
+43
+
+Linux Intro :: Commands :: Administrative Power
+
+44
+
+Linux Intro :: Commands :: Advanced Tools (find, grep, pipes)
+
+45
+
+Linux Intro :: Commands :: Output Redirection ( > , >> )
+
+46
+
+Linux Intro :: Commands :: Reading Files on Screen ( cat, more, less )
+
+47
+
+Linux Intro :: Commands :: Essential Shortcuts
+
+48
+
+Linux Intro :: Commands :: Text Editors (vim, nano, gedit)
+
+49
+
+Linux Intro :: Commands :: Secure Shell (ssh)
+
+50
+
+Linux Intro :: Commands :: ssh
+
+51
+
+Linux Intro :: Commands :: Later ...
+
+echo
+
+man
+
+ps
+
+df
+
+kill
+
+ip
+
+history
+
+date
+
+ping
+
+...
+
+wget
+apt
+tar
+...
+
+52
+
+Linux Intro
+Environment Vars
+53
+
+⇑
+
+Linux Intro :: Environment Variables
+
+54
+
+Linux Intro :: Environment Variables
+
+55
+
+Linux Intro
+Shell Scripting
+56
+
+⇑
+
+Linux Intro :: Shell Scripting
+
+57
+
+Linux Intro :: Shell Scripting
+Example: Rename Files in a Directory
+
+img_01.jpg
+img_07.jpg
+img_12.jpg
+experimentA_01.jpg
+experimentA_07.jpg
+experimentA_12.jpg
+
+58
+
+Linux Intro :: Shell Scripting
+
+Typical Use Cases for Shell Scripts ...
+
+59
+
+Python Intro
+62
+
+⇑
+
+Python Intro :: Overview
+−
+
+Ressources
+
+−
+
+The Python Philosophy
+
+−
+
+How to start a Python program
+
+−
+
+import & Namespaces
+
+−
+
+Data Structures
+
+−
+
+Functions
+
+−
+
+Operators
+
+−
+
+Control Flow
+
+−
+
+Object Oriented Programming
+
+−
+
+NumPy & Matplotlib
+
+−
+
+Practice Tasks
+
+−
+
+The Zen of Python
+
+−
+
+What‘s next?
+63
+
+Python Intro
+Ressources
+64
+
+⇑
+
+Python Intro :: Ressources
+
+65
+
+Python Intro :: Ressources
+
+66
+
+Python Intro :: Ressources
+
+67
+
+Python Intro
+The Python Philosophy
+
+69
+
+⇑
+
+„Hello World“ in Python
+
+70
+
+The Python Philosophy :: Info for C++ Developers
+
+• Design Philosophy
+
+− Python prioritizes readability and development speed (productivity) over fine-grained memory control.
+Think of it as "executable pseudocode."
+
+• Memory Management
+
+− Forget new, delete, and smart pointers. Python uses automatic garbage collection and reference counting.
+
+• Typing System
+
+− Python is strongly but dynamically typed. Variables are names pointing to objects, not fixed memory locations.
+No more int x = 5; , just x = 5.
+
+• Execution Model
+
+− It is an interpreted/bytecode-compiled language.
+There is no separate "compile" step like g++; the interpreter handles it at runtime.
+
+• Syntax Shift
+
+− Braces vs. Indentation: Whitespace defines scope (blocks). No more ; or {}.
+− Everything is an Object: Even integers and functions are objects on the heap.
+
+• The "Standard Library" Advantage
+
+− Tasks requiring external libraries in C++ (like JSON parsing or HTTP requests) are often built-in or one-liners in Python.
+In C++, you tell the computer how to do it.
+In Python, you tell the computer what you want done.
+
+71
+
+The Python Philosophy :: Info for C++ Developers :: Reading and Printing a File „Line by Line“
+
+72
+
+The Python Philosophy :: Comparison to Java and Matlab
+
+73
+
+The Python Philosophy :: Python Execution Model
+
+74
+
+The Python Philosophy :: Python Execution Model
+
+75
+
+Python Intro
+How to start a
+Python program
+78
+
+⇑
+
+Python Intro :: How to start a Python program
+
+79
+
+Python Intro :: How to start a Python program
+
+80
+
+Python Intro :: How to start a Python program
+
+81
+
+Python Intro :: How to start a Python program
+
+82
+
+Python Intro :: How to start a Python program
+
+83
+
+Python Intro :: How to start a Python program
+
+84
+
+Python Intro
+import & Namespaces
+85
+
+⇑
+
+Python Intro :: import & Namespaces
+
+.
+
+86
+
+Python Intro :: import & Namespaces
+
+87
+
+Python Intro
+Data Structures
+88
+
+⇑
+
+Python Intro :: Data Structures :: Numbers (Integers & Floats)
+
+89
+
+Python Intro :: Data Structures :: Strings (Text & Buffers)
+
+90
+
+Python Intro :: Data Structures :: Strings (Text & Buffers)
+
+91
+
+Python Intro :: Data Structures :: F-Strings
+
+92
+
+Python Intro :: Data Structures :: F-Strings
+
+93
+
+Python Intro :: Data Structures :: Lists (Dynamic Arrays)
+
+94
+
+Python Intro :: Data Structures :: List Comprehensions
+
+95
+
+Python Intro :: Data Structures :: List Comprehensions
+
+96
+
+Python Intro :: Data Structures :: Tuples (Immutables)
+
+97
+
+Python Intro :: Data Structures :: Dictionaries (Key-Value)
+
+98
+
+Python Intro :: Data Structures :: Sets (Unique Collections)
+
+99
+
+Python Intro :: Data Structures :: Queues
+
+100
+
+Python Intro
+Functions
+103
+
+⇑
+
+Python Intro :: Functions
+
+What are functions for?
+• to avoid repetition
+Functions are for your brain!
+• to turn chaos into structure
+
+104
+
+Python Intro :: Functions
+
+105
+
+Python Intro :: Functions
+
+106
+
+Python Intro :: Functions
+
+107
+
+Python Intro :: Functions
+
+108
+
+Python Intro :: Functions
+The Power Tools: *args and **kwargs
+
+109
+
+Python Intro :: Functions
+
+110
+
+Python Intro :: Functions
+
+111
+
+Python Intro
+Operators
+123
+
+⇑
+
+Python Intro :: Operators
+
+The Power Operator (**)
+
+124
+
+Python Intro
+Control Flow
+125
+
+⇑
+
+Python Intro :: Control Flow
+
+126
+
+Python Intro :: Control Flow
+
+tbd or b/c of nesting
+127
+
+Python Intro :: Control Flow
+
+128
+
+Python Intro :: Control Flow
+
+129
+
+Python Intro :: Control Flow
+
+130
+
+Python Intro :: Control Flow
+
+131
+
+Python Intro :: Control Flow
+
+132
+
+Python Intro :: Control Flow
+
+133
+
+Python Intro :: Control Flow
+
+134
+
+Python Intro :: Control Flow
+
+143
+
+Python Intro
+Object Oriented
+Programming (OOP)
+145
+
+⇑
+
+Python Intro :: Classes and OOP :: Anatomy of a Class
+
+146
+
+Python Intro :: Classes and OOP :: The „Constructor“
+
+147
+
+Python Intro :: Classes and OOP :: Inheritance & Super
+
+148
+
+Python Intro :: Classes and OOP :: Class Variables & Instance Variables
+
+150
+
+Python Intro :: Classes and OOP :: Decorators
+
+151
+
+Python Intro :: Classes and OOP :: Abstract Base Classes
+
+152
+
+Python Intro :: Classes and OOP :: Composition over Inheritance
+
+153
+
+Python Intro :: Classes and OOP :: Dunder Methods (Operator Overloading)
+
+154
+
+Python Intro :: Classes and OOP :: Exception Handling
+
+155
+
+Python Intro :: Object Oriented Programming (OOP)
+
+176
+
+Python Intro
+NumPy & Matplotlib
+177
+
+⇑
+
+Python Intro :: NumPy and Matplotlib
+
+178
+
+Python Intro :: NumPy and Matplotlib
+
+179
+
+Python Intro :: NumPy and Matplotlib
+
+180
+
+Python Intro :: NumPy and Matplotlib
+
+181
+
+Python Intro :: NumPy and Matplotlib
+
+182
+
+Python Intro :: NumPy and Matplotlib
+
+183
+
+Python Intro :: NumPy and Matplotlib  Matlab
+
+.
+
+184
+
+Python Intro :: NumPy and Matplotlib  Matlab (Array Creation & Grid Generation)
+
+185
+
+Python Intro :: NumPy and Matplotlib  Matlab (Linear Algebra & Matrix Math)
+
+186
+
+Python Intro :: NumPy and Matplotlib  Matlab (Basis Math & Trigonometry)
+
+187
+
+Python Intro :: NumPy and Matplotlib  Matlab (Statistics & Data Reduction)
+
+188
+
+Python Intro :: NumPy and Matplotlib  Matlab (Important Differences)
+
+.
+
+189
+
+Python Intro :: numpy vs. math (Vectorized vs. Scalar)
+
+190
+
+Python Intro :: numpy vs. math (Vectorized vs. Scalar)
+
+191
+
+Python Intro :: numpy vs. math (Vectorized vs. Scalar)
+
+192
+
+Python Intro :: NumPy & Matplotlib :: Example „sine“ Plot
+
+193
+
+Python Intro
+Practice Tasks
+195
+
+⇑
+
+Python Intro :: Practice Tasks
+
+• Hands-on programming tasks designed for C++ students transitioning to Python
+• Practice „Pythonic“ data structures, list comprehensions, and NumPy arrays
+− no C++ style loops
+
+1. Data Structures & List Comprehensions
+2. Dictionaries & F-Strings
+3. NumPy Vectorization
+4. OOP
+
+196
+
+Python Intro :: Practice Task 1 :: Data Structures & List Comprehensions (ex. Lidar Readings)
+
+T1
+
+197
+
+Python Intro :: Practice Task 2 :: Dictionaries & F-Strings (State Logger)
+
+T2
+
+199
+
+Python Intro :: Practice Task 3 :: NumPy Vectorization (Waypoint Distances)
+
+T3
+
+201
+
+Python Intro :: Practice Task 4 :: OOP (Diff-Drive Robot Class)
+
+T4
+
+203
+
+Python Intro
+The Zen of Python
+211
+
+⇑
+
+Python Intro :: The Zen of Python (PEP 20)
+PEP 20 – The Zen of Python
+
+212
+
+Python Intro
+What‘s next?
+213
+
+⇑
+
+Python Intro :: What‘s next? :: Python Libraries / Packages / Modules
+
+https://medium.com/@PythonDude/python-the-2023-road-map-to-master-it-all-2ed2460efa6f
+
+214
+
+VS Code with AI
+225
+
+⇑
+
+VS Code with AI :: Example :: Calculate Easter (and backwards Ash Wednesday)
+
+227
+
+Turtlebot
+228
+
+⇑
+
+Turtlebot
+
+https://www.youtube.com/watch?v=2I_29m_Z3WA
+
+229
+
+Turtlebot :: Ressources
+
+• 📚📚 Manual https://emanual.robotis.com/docs/en/platform/turtlebot3/quick-start/
+•📥📥 GitHub Repositories https://github.com/ROBOTIS-GIT/turtlebot3
+•💬💬 Community https://forum.robotis.com/
+https://discourse.ros.org/c/turtlebot/
+
+230
+
+Docker
+246
+
+⇑
+
+Git, GitHub
+248
+
+⇑
+
+Lab 1
+250
+
+⇑
+
+Lab 1of3
+
+see separate pdf at:
+https://lernen.h-da.de/mod/folder/view.php?id=1139174
+
+251
+
+Lab 2
+252
+
+⇑
+
+Lab 3
+254
+
+⇑
+
+ROS :: Ressources
+269
+
+⇑
+
+ROS :: Ressources
+
+• https://ros.org/
+• https://docs.ros.org/en/humble/index.html
+• https://www.theconstruct.ai/
+•
+•
+•
+•
+•
+
+https://www.youtube.com/@RoboticsBackEnd
+https://www.youtube.com/@aleksandarhaber
+https://www.youtube.com/@digikey
+https://www.youtube.com/@Easy_Peasy_Robotics
+...
+
+270
+
+ROS :: Fundamentals
+272
+
+⇑
+
+ROS :: Fundamentals :: Node, Topic, Message, Service
+
+273
+
+ROS :: Fundamentals :: Node
+
+274
+
+ROS :: Fundamentals :: Node
+
+275
+
+ROS :: Fundamentals :: Nodes
+
+276
+
+ROS :: Fundamentals :: Preliminary Steps to Run a ROS Program
+
+277
+
+ROS :: Fundamentals :: Topic and Message
+
+278
+
+ROS :: Fundamentals :: Topic and Message
+
+279
+
+ROS :: Fundamentals :: Packages
+
+Examples:
+• turtlesim
+• sensor_msgs
+• nav2_bringup
+• rclpy
+• rviz2
+• tf2
+• gazebo_ros_pkgs
+• rosbag2
+
+280
+
+ROS :: Fundamentals :: Packages
+
+... many pkgs ...
+
+281
+
+ROS :: Fundamentals :: Starting a ROS Program :: run vs. launch
+
+282
+
+ROS :: Fundamentals :: Directory Structure
+
+283
+
+ROS :: Fundamentals :: Communication
+
+284
+
+ROS :: Fundamentals :: Communication
+
+285
+
+ROS :: Fundamentals :: Command Structure
+
+286
+
+ROS :: Fundamentals :: Topic vs. Service
+
+* experts program asynchronous service calls
+* one server can have many clients
+287
+
+ROS :: Fundamentals :: Topic vs. Service
+
+288
+
+ROS :: turtlesim
+289
+
+⇑
+
+ROS :: turtlesim
+
+290
+
+ROS :: turtlesim :: Topics
+
+291
+
+ROS :: turtlesim :: Topics :: cmd_vel
+Topic and Message Type
+
+Topic Status
+
+Looking at Live Data
+
+ROS :: turtlesim :: Topics :: cmd_vel
+Understanding the Message Struture
+
+Checking Performance
+
+293
+
+ROS :: turtlesim :: Topics :: cmd_vel :: Publish a Message Manually
+Move the Turtle Once
+
+ros2 topic pub --once /turtle1/cmd_vel geometry_msgs/msg/Twist
+"{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 1.8}}"
+
+294
+
+ROS :: turtlesim :: Topics :: cmd_vel :: Publish a Message Manually
+Move the Turtle Continuously
+
+ros2 topic pub --rate 1 /turtle1/cmd_vel geometry_msgs/msg/Twist
+"{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 1.8}}"
+
+295
+
+ROS :: turtlesim :: Topics :: cmd_vel :: Publish a Message :: Modes of Operations
+ros2 topic pub --rate 1 /turtle1/cmd_vel geometry_msgs/msg/Twist
+"{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 1.8}}"
+
+296
+
+ROS :: First Program
+297
+
+⇑
+
+ROS :: turtlesim Demo
+
+turtle_teleop_key
+
+topic: /turtle1/cmd_vel
+msg: [geometry_msgs/msg/Twist]
+
+turtlesim_node
+
+298
+
+ROS :: First Program :: Move Turtle
+
+move_turtle_node
+
+topic: /turtle1/cmd_vel
+msg: [geometry_msgs/msg/Twist]
+
+turtlesim_node
+
+topic: /turtle1/pose
+msg: [turtlesim/msg/Pose]
+
+299
+
+ROS :: First Program :: Create a ROS2 Python Package “turtlesim_play”
+
+300
+
+ROS :: First Program :: (deleting your own ROS package from your own workspace)
+
+301
+
+ROS :: First Program :: Create Source File move_turtle.py and make it executable
+
+302
+
+ROS :: First Program :: move_turtle.py
+move_turtle.py
+
+setup.py
+
+303
+
+ROS :: First Program :: Move Turtle :: Naming Challenges
+
+MoveTurtle
+
+move_turtle.py
+
+move_turtle1
+
+move_turtle_node
+304
+
+ROS :: Naming Challenges :: Why you shouldn’t make all names {Class, File, Executable, Node} the same
+
+305
+
+ROS :: First Program :: move_turtle.py
+
+move_turtle.py
+
+package.xml
+
+306
+
+ROS :: First Program :: move_turtle.py :: Subscriber
+
+307
+
+ROS :: First Program :: move_turtle.py :: Ending a ROS Node
+
+308
+
+ROS :: First Program :: move_turtle.py :: Publisher
+
+-
+
+309
+
+ROS :: First Program :: move_turtle.py :: rqt_graph
+
+310
+
+ROS :: First Program :: Steps of building a program
+
+• create package
+
+~/ros2_ws/src$ ros2 pkg create turtlesim_play --build-type...
+
+• write new node
+
+~/ros2_ws/src/turtlesim_play/turtlesim_play$ touch move_turtle.py
+
+• specify executable
+
+~/ros2_ws/src/turtlesim_play$ nano setup.py
+
+• specify dependencies
+
+~/ros2_ws/src/turtlesim_play$ nano package.xml
+
+• (create launch file)
+• build via colcon
+
+~/ros2_ws$ colcon build --package-select turtlesim_play
+
+• source workspace
+
+~/ros2_ws/install$ source setup.bash
+
+• run new program
+
+~/ros2_ws$ ros2 run turtlesim_play move_turtle
+311
+
+Checkpoint
+
+• Explain in the context of ROS:
+− Package
+− Node
+− Topic
+− Message
+− Executable
+− Publisher
+− Subscriber
+
+312
+
+⇑
+
+ROS :: Services
+313
+
+⇑
+
+ROS :: turtlesim Services
+after starting turtlesim_node
+and turtle_teleop_key ...
+
+in
+out
+
+request args
+response
+314
+
+ROS :: Calling a Service from the CLI (command line interface)
+
+after starting turtlesim_node and turtle_teleop_key ...
+″{}″
+
+315
+
+ROS :: Calling a Service via GUI / Tool (rqt Plugin)
+
+after starting turtlesim_node ...
+″{}″
+
+316
+
+ROS :: Calling a Service from a file / within a program :: async()
+
+318
+
+ROS :: Calling a Service from a file / within a program :: async()
+
+319
+
+ROS :: Calling a Service from a file / within a program :: async()
+
+320
+
+ROS :: Calling a Service from a file / within a program :: SpawnTurtle()
+
+setup.py 321
+
+ROS :: Calling a Service from a file / within a program
+
+324
+
+ROS :: bag
+325
+
+⇑
+
+ROS :: bag
+command line tool for recording data published on topics; example: record /cmd_vel messages
+1. Create directory for recordings
+$ mkdir my_recordings
+
+- move turtle around with teleop_key
+
+2. Start recording selected topic(s)
+$ cd my_recordings
+$ ros2 bag record –o my_first_record /turtle1/cmd_vel
+- stop recording via CTRL+C
+
+- kill teleop_key; (restart turtlesim_node)
+
+3. Check recording (gives start/end dates, messages, topics, ...)
+$ ros2 bag info my_first_record
+- move turtle by replaying the bag
+: this publishes the stored /cmd_vel messages
+4. Play recording
+$ ros2 bag play my_first_record
+•
+•
+•
+•
+
+you can record multiple topics
+you can filter or exclude topics
+you can play the bag data slower or faster
+...
+
+326
+
+ROS :: bag
+
+327
+
+ROS :: bag
+If you record pose data of the turtle and want to move the turtle
+later according to the recording:
+create a „bridge“ between the pose data
+published by the bag player and the
+teleport service of the turtle ...
+
+328
+
+ROS :: Actions
+329
+
+⇑
+
+ROS :: Actions
+
+330
+
+ROS :: Actions
+
+331
+
+ROS :: Actions
+
+332
+
+ROS :: Actions
+
+333
+
+ROS :: Actions
+
+334
+
+ROS :: Actions
+
+Goal
+Result
+Feedback
+
+335
+
+ROS :: Actions
+
+336
+
+ROS :: Actions
+
+337
+
+ROS :: Actions
+
+$ ros2 action list
+$ ros2 action info
+$ ros2 action send_goal
+
+338
+
+ROS :: Actions
+
+339
+
+ROS :: Actions
+action
+
+interface
+
+params
+
+feedback
+
+:
+:
+
+340
+
+ROS :: Second Program
+341
+
+⇑
+
+ROS :: Second Program :: Custom Action :: MoveTriangle()
+# Requirements
+A Python program shall implement a ROS2 action server with the following functionality:
+• A Turtle from the turtlesim demo shall move from
+Point 1 to Point 2 to Point 3 to Point 1 with desired velocity
+• Points shall be specified in order by their x|y coordinates
+• Feedback shall be provided at Points 2 and 3
+• After reaching Point 1, the result „Triangle completed“ shall be provided
+Naming:
+− MoveTriangle.action
+− move_triangle_action_server.py
+− move_triangle_action_client.py
+
+342
+
+ROS :: Actions :: Custom Action :: MoveTriangle()
+
+2
+1
+
+3
+343
+
+ROS :: Second Program :: Custom Action :: MoveTriangle() :: Activity Diagram
+# Requirements
+A Python program shall implement a ROS2 action server with the following functionality:
+• A Turtle from the turtlesim demo shall move from
+Point 1 to Point 2 to Point 3 to Point 1 with desired velocity
+• Points shall be specified in order by their x|y coordinates
+• Feedback shall be provided at Points 2 and 3
+• After reaching Point 1, the result „Triangle completed“ shall be provided
+
+2
+1
+
+3
+344
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Activities, Objects, Callbacks
+Action Server
+execute_callback(goal_handle)
+•
+•
+•
+•
+
+extract & check inputs from action goal
+form closed loop target path
+wait for first pose data
+loop: for each leg of triangle (waypoints)
+• loop: drive to next point
+• check for cancel request
+• compute distance and angle to target
+• calculate velocity command
+• break if target is reached
+• send velocity command
+• wait 50ms
+• send feedback (Point 2,3 reached)
+• send result
+
+Pose Subscriber
+pose_callback(msg)
+• set current pose
+• set pose received flag
+
+cmd_vel Publisher
+
+cancel_callback(cancel_request)
+• set cancel response
+
+345
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Control
+
+„Tri-Phase“ Control Law: Use proximity tolerances to ensure smooth motions:
+
+346
+
+ROS :: Actions :: Looking back to First Program (“Move Turtle”)
+
+• Control logic was executed in
+pose subscriber callback (event driven)
+
+347
+
+ROS :: Actions :: Long-running Callback / Scheduling
+• „MoveTriangle“ control loop runs for a long time in execute_callback()
+ pose_callback() may never run
+• Action server is persistent/stateful/long-running
+• Fix: MultiThreadedExecutor and ReentrangCallbackGroup
+ multiple worker threads and concurrent callbacks within one node
+• It is possible to create action servers without multithreading
+ need to avoid blocking loops
+ alternatives {timers, async defs, states machines, non-blocking execution}
+
+348
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Full Code
+
+349
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Full Code
+
+350
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Full Code
+
+351
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Full Code
+
+352
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Full Code
+
+353
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Future Design Improvement
+
+execute_callback() handles
+• planning
+• control
+• execution
+• feedback
+• cancellation handling
+
+Split Responsibilities
+
+Component
+
+Responsibiliy
+
+Planner
+
+Computes Path
+
+Controller
+
+Computes Velocity
+
+Behavior Tree
+
+Mission Logic
+
+Recovery Server
+
+Failure Handling
+
+Action Server
+
+Client Interface
+
+354
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Directions to dig deeper ...
+
+355
+
+ROS :: Actions :: Questions
+• What kind of controller is implemented in „Program 2“ ?
+• How would you implement a PID controller?
+• Explain the following table:
+
+• Create test cases for the move_triangle_action_server.
+• How would you further improve the program?
+− point of spawning ≠ first waypoint
+− can the turtle cut corners?
+− are there oscillations/overshoot?
+
+356
+
+ROS :: Actions :: Custom Action :: Custom Interface Package
+
+update package.xml in turtlesim_play to find new interface ...
+
+import the action in the Python files ...
+357
+
+ROS :: Actions :: Custom Action :: MoveTriangle() :: Client
+
+358
+
+ROS :: rviz2
+376
+
+⇑
+
+
