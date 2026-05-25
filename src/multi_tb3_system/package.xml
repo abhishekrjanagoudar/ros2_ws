@@ -2,43 +2,51 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>multi_tb3_system</name>
-  <version>0.1.0</version>
-  <description>Multi-robot TurtleBot3 Burger leader-follower convoy system for ROS 2 Jazzy + Gazebo Sim</description>
+  <version>0.2.0</version>
+  <description>
+    Modular multi-robot TurtleBot3 Burger leader-follower convoy system.
+    ROS 2 Jazzy + Gazebo Sim (Harmonic). Dynamic N-robot spawning,
+    LiDAR-based autonomous following, namespaced ros_gz_bridge transport.
+  </description>
   <maintainer email="student@h-da.de">Hochschule Darmstadt Student</maintainer>
   <license>Apache-2.0</license>
 
+  <!-- ── Build tools ──────────────────────────────────────────────────────── -->
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
-  <!-- Python -->
+  <!-- ── Core ROS 2 Python ────────────────────────────────────────────────── -->
   <depend>rclpy</depend>
 
-  <!-- Messages -->
-  <depend>geometry_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <depend>nav_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>tf2_msgs</depend>
+  <!-- ── Message types ────────────────────────────────────────────────────── -->
+  <depend>geometry_msgs</depend>   <!-- TwistStamped for cmd_vel          -->
+  <depend>sensor_msgs</depend>     <!-- LaserScan, JointState             -->
+  <depend>nav_msgs</depend>        <!-- Odometry                          -->
+  <depend>std_msgs</depend>        <!-- Bool, String (future use)         -->
+  <depend>tf2_msgs</depend>        <!-- TFMessage                         -->
+  <depend>rosgraph_msgs</depend>   <!-- Clock (sim time bridge)           -->
 
-  <!-- TF2 -->
+  <!-- ── TF2 ──────────────────────────────────────────────────────────────── -->
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
 
-  <!-- Simulation -->
+  <!-- ── Gazebo / ROS bridge ──────────────────────────────────────────────── -->
   <depend>ros_gz_bridge</depend>
   <depend>ros_gz_sim</depend>
+
+  <!-- ── TurtleBot3 assets ────────────────────────────────────────────────── -->
   <depend>turtlebot3_gazebo</depend>
   <depend>turtlebot3_description</depend>
+
+  <!-- ── Robot description publishing ────────────────────────────────────── -->
   <depend>robot_state_publisher</depend>
   <depend>joint_state_publisher</depend>
 
-  <!-- Teleop -->
-  <depend>teleop_twist_keyboard</depend>
-
-  <!-- Visualization -->
+  <!-- ── Visualization ────────────────────────────────────────────────────── -->
   <depend>rviz2</depend>
 
+  <!-- ── Testing ──────────────────────────────────────────────────────────── -->
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
