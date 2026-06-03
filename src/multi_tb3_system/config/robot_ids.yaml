@@ -1,42 +1,18 @@
-# robot_ids.yaml
-# ==============
-# Convoy formation hierarchy definition.
-# Specifies which robot follows which in the leader-follower chain.
-#
-# leader   → the robot this node follows (its /scan topic is monitored)
-# follower → the namespace of this robot node
-#
-# Formation: tb1 (leader, teleoperated) → tb2 → tb3
-#
-# NOTE: This file is REFERENCE DOCUMENTATION ONLY.
-# It is NOT loaded by any launch file or ROS node at runtime.
-# The actual formation is configured directly in multi_robot.launch.py
-# via the make_robot_actions() calls.
+# robot_ids.yaml — convoy formation reference (NOT loaded at runtime).
+# Actual formation is defined in spawn_robots.launch.py / multi_robot.launch.py.
 
 convoy:
   robots:
     - namespace: "tb1"
       role: "leader"
-      description: "Teleoperated robot. Driven by keyboard input."
-      initial_pose:
-        x: 0.0
-        y: 0.0
-        yaw: 0.0
+      initial_pose: {x: 0.0, y: 0.0, yaw: 0.0}
 
     - namespace: "tb2"
       role: "follower"
       follows: "tb1"
-      description: "First autonomous follower. Follows tb1."
-      initial_pose:
-        x: -1.0
-        y: 0.0
-        yaw: 0.0
+      initial_pose: {x: -1.0, y: 0.0, yaw: 0.0}
 
     - namespace: "tb3"
       role: "follower"
       follows: "tb2"
-      description: "Second autonomous follower. Follows tb2."
-      initial_pose:
-        x: -2.0
-        y: 0.0
-        yaw: 0.0
+      initial_pose: {x: -2.0, y: 0.0, yaw: 0.0}

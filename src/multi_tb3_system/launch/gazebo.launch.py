@@ -1,29 +1,21 @@
 #!/usr/bin/env python3
 """
-gazebo.launch.py
-================
-Modular launch file — Gazebo Sim lifecycle management.
+gazebo.launch.py — Gazebo Sim lifecycle (server + optional GUI + clock bridge).
 
-Responsibilities:
-  - Start the Gazebo Sim server  (headless, -s)
-  - Optionally start the Gazebo GUI client (-g), controlled by ``gz`` arg
-  - Bridge the global /clock topic to ROS
+GUI uses ExecuteProcess (not IncludeLaunchDescription) to inject
+LIBGL_ALWAYS_SOFTWARE=1 per-process — fixes QGLXContext failure on WSL2.
+GUI crash does NOT kill the server (on_exit_shutdown omitted for GUI).
 
-Args (all passed from robot.launch.py):
-  world_file  : absolute path to the .world SDF file
-  gz          : 'true' | 'false'  — show Gazebo GUI window
-  use_sim_time: 'true' | 'false'  — consumed downstream, not used here
-
-Standalone usage (debug only)::
-
-  ros2 launch multi_tb3_system gazebo.launch.py \\
-    world_file:=/path/to/empty.world gz:=true
+Args:
+  world_file  : absolute path to .world SDF
+  gz          : 'true' | 'false' (default) — show Gazebo GUI
+  use_sim_time: passed through, not used here directly
 """
 
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -34,49 +26,29 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description() -> LaunchDescription:
     ros_gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
-    # ── Args ──────────────────────────────────────────────────────────────────
-    world_file_arg = DeclareLaunchArgument(
-        'world_file',
-        description='Absolute path to the Gazebo world SDF file.',
-    )
-    gz_arg = DeclareLaunchArgument(
-        'gz',
-        default_value='false',
-        description="Launch Gazebo GUI client ('true' / 'false').",
-    )
-
     world_file = LaunchConfiguration('world_file')
     gz         = LaunchConfiguration('gz')
 
-    # ── Gazebo Sim server (always headless; GUI is a separate process) ────────
+    # Headless sim server — death kills whole launch (on_exit_shutdown=true)
     gz_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_pkg, 'launch', 'gz_sim.launch.py')
         ),
         launch_arguments={
-            # -r  : run simulation immediately on start
-            # -s  : server only (no GUI)
-            # -v2 : verbosity level 2 (warnings + errors)
-            'gz_args':        ['-r -s -v2 ', world_file],
+            'gz_args':         ['-r -s -v2 ', world_file],
             'on_exit_shutdown': 'true',
         }.items(),
     )
 
-    # ── Gazebo GUI client (optional) ──────────────────────────────────────────
-    gz_client = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(ros_gz_sim_pkg, 'launch', 'gz_sim.launch.py')
-        ),
-        launch_arguments={
-            'gz_args':        '-g -v2 ',
-            'on_exit_shutdown': 'true',
-        }.items(),
+    # GUI client — LIBGL_ALWAYS_SOFTWARE=1 bypasses broken WSL2 GLX/drisw path
+    gz_client = ExecuteProcess(
+        cmd=['gz', 'sim', '-g', '-v2', '--force-version', '8'],
+        additional_env={'LIBGL_ALWAYS_SOFTWARE': '1', 'QT_OPENGL': 'software'},
         condition=IfCondition(gz),
+        output='screen',
     )
 
-    # ── Global /clock bridge ──────────────────────────────────────────────────
-    # Bridges Gazebo simulation time to ROS /clock.
-    # Enables use_sim_time=true across all ROS nodes.
+    # Bridge /clock (Gz sim time → ROS)
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -86,8 +58,10 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     return LaunchDescription([
-        world_file_arg,
-        gz_arg,
+        DeclareLaunchArgument('world_file',
+                              description='Absolute path to the Gazebo world SDF.'),
+        DeclareLaunchArgument('gz', default_value='false',
+                              description="Launch Gazebo GUI client ('true'/'false')."),
         gz_server,
         gz_client,
         clock_bridge,

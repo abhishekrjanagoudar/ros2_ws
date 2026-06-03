@@ -1,60 +1,38 @@
 #!/usr/bin/env python3
 """
-world_empty.launch.py
-=====================
-Launches the Multi-TurtleBot3 convoy in the empty world (no obstacles).
-Best for initial convoy formation testing.
+world_empty.launch.py — convenience launcher for the empty world.
+Delegates to multi_robot.launch.py with world:=empty.
 
 Usage:
   ros2 launch multi_tb3_system world_empty.launch.py
-  ros2 launch multi_tb3_system world_empty.launch.py use_rviz:=true
-  ros2 launch multi_tb3_system world_empty.launch.py use_gui:=false
-
-RECOMMENDED TELEOP (Burst-Mode):
-  To teleoperate tb1 safely with "Hold-To-Move" functionality (stops immediately on release),
-  run the custom teleop controller which natively publishes TwistStamped:
-  ros2 run multi_tb3_system teleop_controller.py
-
-TROUBLESHOOTING:
-  - Check /cmd_vel types using: ros2 topic info /cmd_vel --verbose
-  - Ensure teleop publishes geometry_msgs/msg/TwistStamped
+  ros2 launch multi_tb3_system world_empty.launch.py use_rviz:=true use_gui:=false
 """
+
+import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-import os
 
 
-def generate_launch_description():
+def generate_launch_description() -> LaunchDescription:
     pkg_share = get_package_share_directory('multi_tb3_system')
 
-    use_rviz_arg = DeclareLaunchArgument(
-        'use_rviz',
-        default_value='false',
-        description='Launch RViz2 (set true to enable)',
-    )
-    use_gui_arg = DeclareLaunchArgument(
-        'use_gui',
-        default_value='true',
-        description='Launch Gazebo GUI (set false for headless/WSL)',
-    )
-
-    multi_robot_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'multi_robot.launch.py')
-        ),
-        launch_arguments={
-            'world':    'empty',
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'use_gui':  LaunchConfiguration('use_gui'),
-        }.items(),
-    )
-
     return LaunchDescription([
-        use_rviz_arg,
-        use_gui_arg,
-        multi_robot_launch,
+        DeclareLaunchArgument('use_rviz', default_value='false',
+                              description="Show RViz2 ('true'/'false')."),
+        DeclareLaunchArgument('use_gui',  default_value='true',
+                              description="Show Gazebo GUI ('true'/'false')."),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_share, 'launch', 'multi_robot.launch.py')
+            ),
+            launch_arguments={
+                'world':    'empty',
+                'use_rviz': LaunchConfiguration('use_rviz'),
+                'use_gui':  LaunchConfiguration('use_gui'),
+            }.items(),
+        ),
     ])

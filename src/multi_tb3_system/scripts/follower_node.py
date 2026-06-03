@@ -246,11 +246,17 @@ def main(args=None) -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        # Send stop command on shutdown
-        node._publish_twist(0.0, 0.0)
-        node.get_logger().info("FollowerNode shutting down — robot stopped.")
+        # Guard against external kill (launch shutdown cascade) where
+        # rclpy context is already invalid before finally block runs.
+        try:
+            if rclpy.ok():
+                node._publish_twist(0.0, 0.0)
+                node.get_logger().info("FollowerNode shutting down — robot stopped.")
+        except Exception:
+            pass
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
