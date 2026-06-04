@@ -7,6 +7,9 @@ and the bridge settle before cmd_vel flows.
   tb2: spawns at 3s → follower starts at 5s
   tb3: spawns at 6s → follower starts at 8s
 
+Spawn/start timing comes from ``multi_tb3_system.launch_common`` so it stays
+in lock-step with spawn_robots.launch.py.
+
 Args:
   nBurger     : follower count 1–2 (default 2)
   use_sim_time: 'true' (default) | 'false'
@@ -20,23 +23,19 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-_SPAWN_DELAY_STEP    = 3.0   # must match spawn_robots.launch.py
-_FOLLOWER_INIT_BUFFER = 2.0  # extra seconds after spawn before follower drives
+from multi_tb3_system.launch_common import clamp_followers, follower_start_delay
 
 
 def _launch_setup(context, *args, **kwargs):
-    n_burgers    = int(LaunchConfiguration('nBurger').perform(context))
+    n_burgers    = clamp_followers(int(LaunchConfiguration('nBurger').perform(context)))
     use_sim_time = LaunchConfiguration('use_sim_time').perform(context) == 'true'
-    n_burgers    = max(0, min(n_burgers, 2))
 
     pkg_share   = get_package_share_directory('multi_tb3_system')
     params_file = os.path.join(pkg_share, 'config', 'follower_params.yaml')
 
     actions = []
     for i in range(2, n_burgers + 2):   # tb2, tb3
-        ns    = f'tb{i}'
-        delay = (i - 1) * _SPAWN_DELAY_STEP + _FOLLOWER_INIT_BUFFER
-
+        ns   = f'tb{i}'
         node = Node(
             package='multi_tb3_system',
             executable='follower_node.py',
@@ -46,7 +45,7 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             emulate_tty=True,
         )
-        actions.append(TimerAction(period=delay, actions=[node]))
+        actions.append(TimerAction(period=follower_start_delay(i), actions=[node]))
 
     return actions
 
