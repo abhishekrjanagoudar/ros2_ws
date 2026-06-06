@@ -1,0 +1,173 @@
+<?xml version="1.0" ?>
+<!--
+  pillars.world
+  =============
+  Gazebo Sim (Harmonic) world with 6 static cylindrical pillars arranged
+  in a staggered slalom pattern.
+
+  Used to verify that follower robots reject static obstacles and only
+  track the moving leader robot ahead.
+
+  Pillar layout (top-down view, Y axis is left/right):
+    Convoy travels in +X direction.
+    Pillars alternate left/right to force heading corrections.
+
+      P1(1.5, 0.5)   P3(3.5, 0.5)   P5(5.5, 0.5)
+           P2(2.5,-0.5)   P4(4.5,-0.5)   P6(6.5,-0.5)
+-->
+<sdf version="1.8">
+  <world name="default">
+
+    <!-- ── Physics ────────────────────────────────────────────────────── -->
+    <!-- 4ms step = 250Hz physics. 1ms (1000Hz) is excessive for TurtleBot3 nav  -->
+    <!-- and burns CPU on WSL2. 4ms gives smooth motion with far less overhead.    -->
+    <physics name="4ms" type="ignored">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ── Required plugins ──────────────────────────────────────────────────── -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- ── Lighting ────────────────────────────────────────────────────── -->
+    <!-- cast_shadows disabled: shadow maps are expensive on Mesa D3D12 (WSL2)   -->
+    <light type="directional" name="sun">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ── Ground plane ──────────────────────────────────────────────────────── -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Pillar macro (repeated 6×) ──────────────────────────────────────── -->
+    <!-- radius=0.10m  height=0.50m  → visible to LiDAR, small enough to steer around -->
+
+    <model name="pillar_1">
+      <static>true</static>
+      <pose>1.5 0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_2">
+      <static>true</static>
+      <pose>2.5 -0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_3">
+      <static>true</static>
+      <pose>3.5 0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_4">
+      <static>true</static>
+      <pose>4.5 -0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_5">
+      <static>true</static>
+      <pose>5.5 0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_6">
+      <static>true</static>
+      <pose>6.5 -0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.10</radius><length>0.50</length></cylinder></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
