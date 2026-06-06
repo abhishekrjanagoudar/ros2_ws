@@ -47,9 +47,13 @@ def _resolve_ui_flags(context, *args, **kwargs):
     mapping_mode   = LaunchConfiguration('mapping_mode').perform(context)
     slam_robot     = LaunchConfiguration('slam_robot').perform(context)
 
-    # ros_ui=true → both GUIs on; ros_ui=false → both off
-    effective_gz   = 'true' if ros_ui == 'true' else ('false' if ros_ui == 'false' else gz_flag)
-    effective_rviz = 'true' if ros_ui == 'true' else ('false' if ros_ui == 'false' else rviz_flag)
+    # ros_ui=true → both GUIs on. ros_ui=false (default) → respect individual gz/rviz flags.
+    if ros_ui == 'true':
+        effective_gz   = 'true'
+        effective_rviz = 'true'
+    else:
+        effective_gz   = gz_flag
+        effective_rviz = rviz_flag
 
     pkg = get_package_share_directory('multi_tb3_system')
 

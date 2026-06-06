@@ -5,7 +5,7 @@
   Used for ROS 2 Jazzy + Gazebo Sim (Harmonic)
 -->
 <sdf version="1.8">
-  <world name="columns_world">
+  <world name="default">
 
     <!-- Physics -->
     <physics type="ode">

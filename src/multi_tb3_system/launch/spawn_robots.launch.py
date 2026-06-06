@@ -42,7 +42,8 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool) -> lis
         executable='create',
         name=f'spawn_{ns}',
         arguments=[
-            '-file', sdf_path,
+            '-world', 'default',    # explicit world name — avoids world-discovery
+            '-file', sdf_path,      # timeout that can fail silently at t=3s
             '-name', ns,
             '-x', str(x), '-y', str(SPAWN_Y), '-z', str(SPAWN_Z),
             '-Y', '0.0',
@@ -85,9 +86,10 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool) -> lis
         executable='static_transform_publisher',
         name=f'static_tf_world_{ns}_odom',
         arguments=[
-            str(x), '0', '0',   # translation: spawn position
-            '0', '0', '0', '1', # rotation: identity quaternion
-            'world', f'{ns}/odom',
+            '--x', str(x), '--y', '0', '--z', '0',
+            '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
+            '--frame-id', 'world',
+            '--child-frame-id', f'{ns}/odom',
         ],
         output='screen',
     )

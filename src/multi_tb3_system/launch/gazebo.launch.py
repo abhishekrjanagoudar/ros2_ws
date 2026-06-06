@@ -2,8 +2,8 @@
 """
 gazebo.launch.py — Gazebo Sim lifecycle (server + optional GUI + clock bridge).
 
-GUI uses ExecuteProcess (not IncludeLaunchDescription) to inject
-LIBGL_ALWAYS_SOFTWARE=1 per-process — fixes QGLXContext failure on WSL2.
+GUI uses ExecuteProcess to inject GPU-accelerated rendering env vars for WSL2.
+Uses GLX path (XWayland → WSLg → D3D12 → NVIDIA GPU) instead of EGL/software.
 GUI crash does NOT kill the server (on_exit_shutdown omitted for GUI).
 
 Args:
@@ -40,14 +40,25 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
-    # GUI client — LIBGL_ALWAYS_SOFTWARE=1 bypasses broken WSL2 GLX/drisw path
+    # GUI client — WSL2 GPU path: GLX via XWayland → WSLg compositor → D3D12 → NVIDIA
+    # DO NOT set LIBGL_ALWAYS_SOFTWARE or llvmpipe here — those force pure CPU rendering.
+    # OGRE2 must use GLX (not EGL headless) because WSL2 has no /dev/dri render nodes;
+    # EGL falls back to EGL_MESA_device_software (software rasterizer on CPU).
     gz_client = ExecuteProcess(
         cmd=['gz', 'sim', '-g', '-v2', '--force-version', '8'],
         additional_env={
-            'LIBGL_ALWAYS_SOFTWARE': '1',
-            'QT_OPENGL': 'software',
-            'GALLIUM_DRIVER': 'llvmpipe',
-            'MESA_LOADER_DRIVER_OVERRIDE': 'llvmpipe'
+            # Force OGRE2 to use GLX context (GPU) instead of EGL headless (CPU fallback)
+            'GZ_SIM_RENDER_ENGINE_API_BACKEND': 'opengl',
+            # Ensure Mesa D3D12 picks NVIDIA, not any Intel iGPU
+            'MESA_D3D12_DEFAULT_ADAPTER_NAME': 'NVIDIA',
+            # Disable VSync stall — WSLg does not need it and it causes frame latency
+            '__GL_SYNC_TO_VBLANK': '0',
+            # Disable DRI3 sync overhead on XWayland
+            'LIBGL_DRI3_DISABLE': '1',
+            # Use OGRE2 rendering engine
+            'GZ_SIM_RENDER_ENGINE': 'ogre2',
+            # Disable shadows — expensive on Mesa D3D12 translation layer
+            'GZ_SIM_DISABLE_SHADOWS': '1',
         },
         condition=IfCondition(gz),
         output='screen',

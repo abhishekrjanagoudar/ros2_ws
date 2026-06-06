@@ -2,7 +2,7 @@
 
 # 🤖 Multi-TurtleBot3 Convoy System
 
-**Autonomous multi-robot leader–follower convoy using LiDAR-only perception**
+**Autonomous multi-robot leader–follower convoy using Pure Pursuit path tracking**
 
 *ROS 2 Jazzy · Gazebo Sim Harmonic · TurtleBot3 Burger*
 
@@ -20,9 +20,9 @@
 
 ## Overview
 
-A production-grade modular ROS 2 package implementing a **3-robot TurtleBot3 Burger convoy** in Gazebo Sim (Harmonic). The leader robot (`tb1`) is teleoperated via keyboard; follower robots (`tb2`, `tb3`) autonomously track the robot directly ahead using **LiDAR-only geometric clustering** — no cameras, no Nav2, no motion history required.
+A production-grade modular ROS 2 package implementing a **3-robot TurtleBot3 Burger convoy** in Gazebo Sim (Harmonic). The leader robot (`tb1`) is teleoperated via keyboard and broadcasts its trajectory; follower robots (`tb2`, `tb3`) autonomously track the path using **Pure Pursuit** to maintain precise separation distances.
 
-Static obstacles (pillars, walls) are **geometrically rejected** by cluster-size filtering. Only compact, appropriately-sized clusters in the forward sector are tracked as the convoy target.
+Followers look ahead along the leader's path, rendering the system completely immune to visual occlusions, obstacle interference, or daisy-chain error accumulation. LiDAR is strictly used for emergency local collision avoidance.
 
 > **University Assignment** — Hochschule Darmstadt  
 > Supervised by Prof. Dr.-Ing. Karl Kleinmann
@@ -34,8 +34,8 @@ Static obstacles (pillars, walls) are **geometrically rejected** by cluster-size
 | Capability | Details |
 |---|---|
 | **Dynamic convoy size** | Launch with `nBurger=1` or `nBurger=2` for 2–3 total robots; single entry point |
-| **LiDAR-only perception** | No cameras, no odometry fusion, no temporal tracking |
-| **Obstacle rejection** | Geometric cluster-size filtering eliminates walls and pillars |
+| **Pure pursuit path tracking** | Robust gap maintenance via nav_msgs/Path published by the orchestrator |
+| **Convoy architecture** | All robots follow a single shared path, preventing error accumulation |
 | **Burst-mode teleop** | Hold-to-move keyboard control with instant stop on release |
 | **Modular launch system** | Six clean, independent launch files orchestrated by `robot.launch.py` |
 | **Shared configuration** | Single source of truth for formation geometry and spawn timing via `launch_common.py` |
@@ -43,6 +43,7 @@ Static obstacles (pillars, walls) are **geometrically rejected** by cluster-size
 | **Namespaced bridging** | `ros_gz_bridge` maps `/tbX/*` ROS topics ↔ Gazebo with no remapping |
 | **Staggered spawning** | Robots load with 3-second gaps to prevent physics instability |
 | **Synchronized follower start** | Followers begin driving 2 seconds after their robot spawns (bridge settle time) |
+| **SLAM mapping** | `slam_toolbox` online_async integration — single-robot or multi-robot mapping modes |
 
 ---
 
@@ -55,8 +56,8 @@ Static obstacles (pillars, walls) are **geometrically rejected** by cluster-size
   │     tb1      │   │     tb2      │   │     tb3      │
   │   (Leader)   │   │  (Follower)  │   │  (Follower)  │
   │              │   │              │   │              │
-  │  Teleop KB   │◄──│  LiDAR scan  │◄──│  LiDAR scan  │
-  │  → cmd_vel   │   │  → cmd_vel   │   │  → cmd_vel   │
+  │  Teleop KB   │◄──│  Pure Pursuit│◄──│ Pure Pursuit │
+  │  → path pub  │   │  → cmd_vel   │   │  → cmd_vel   │
   └──────────────┘   └──────────────┘   └──────────────┘
       x = 0.0 m          x = -1.0 m         x = -2.0 m
 ```
@@ -85,49 +86,15 @@ robot.launch.py  ⭐ ENTRY POINT (dynamic orchestrator)
 │
 ├── followers.launch.py (OpaqueFunction)
 │        └── [per follower: tb2 … tbN]
-│               └── follower_node.py ◄── LiDAR clustering + PD control
+│               └── follower_node.py ◄── Pure pursuit path tracking
+│
+├── mapping.launch.py  (conditional on enable_mapping:=true)
+│        ├── slam_toolbox (async_slam_toolbox_node) ── online_async SLAM
+│        ├── nav2_map_server (map_saver_server) ────── save map on demand
+│        └── nav2_lifecycle_manager ─────────────────── manages map_saver
 │
 └── rviz.launch.py  (conditional on rviz=true / ros_ui:=true)
 ```
-
-**Key improvements:**
-- **Single entry point:** `robot.launch.py` with 6 clean parameters replaces legacy trio (`multi_robot`, `world_empty`, `world_obstacles`)
-- **Shared configuration:** `launch_common.py` holds formation geometry, spawn timing, and limits — ensures spawn/follower timing never drifts
-- **Synchronized startup:** Spawn delay + follower init buffer both controlled from one module
-- **No duplication:** Robot spawn positions, timing constants, clamp logic all defined once
-
-### LiDAR Follower Pipeline
-
-```
-LaserScan (360°)
-    │
-    ▼  polar_to_cartesian()
-    │  Filter valid ranges [0.12m – 3.5m]
-    │
-    ▼  filter_front_sector()
-    │  Keep points within ±30° of heading
-    │
-    ▼  euclidean_cluster()
-    │  Group points with gap < 0.20m
-    │
-    ▼  reject_invalid_clusters()
-    │  < 2 pts  → noise    (discard)
-    │  > 40 pts → wall     (discard)
-    │
-    ▼  select_target()
-    │  → closest valid cluster = robot ahead
-    │
-    ▼  PD Control
-    │  linear_vel  = Kp_lin  × (dist  − target_dist)
-    │  angular_vel = Kp_ang  × angle_to_centroid
-    │
-    ▼  safety_controller.check()
-    │  dist < 0.4m → emergency stop
-    │  side obstacle → steering bias
-    │
-    ▼  /cmd_vel  (Twist → ros_gz_bridge → Gazebo DiffDrive)
-```
-
 ---
 
 ## 📋 Prerequisites
@@ -154,7 +121,10 @@ sudo apt install -y \
   ros-jazzy-ros-gz-sim \
   ros-jazzy-rviz2 \
   ros-jazzy-xacro \
-  ros-jazzy-tf2-tools
+  ros-jazzy-tf2-tools \
+  ros-jazzy-slam-toolbox \
+  ros-jazzy-nav2-map-server \
+  ros-jazzy-nav2-lifecycle-manager
 ```
 
 ### Environment Setup
@@ -201,7 +171,7 @@ ros2 launch multi_tb3_system robot.launch.py ros_ui:=true
 ros2 launch multi_tb3_system robot.launch.py world:=pillars ros_ui:=true
 ```
 
-Wait for all three robots to appear (tb1 at t=0s, tb2 at t+3s, tb3 at t+6s, followers start driving at t+5s and t+8s).
+Wait for all three robots to appear (tb1 at t=0s, tb2 at t+5s, tb3 at t+10s, followers start driving at t+7s and t+12s).
 
 ### Step 2 — Teleoperate the leader
 
@@ -238,36 +208,12 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 | `gz` | bool | `false` | `true`, `false` | Show Gazebo 3D viewer window |
 | `rviz` | bool | `false` | `true`, `false` | Show RViz2 visualization |
 | `ros_ui` | bool | `false` | `true`, `false` | **Convenience override:** `true` → forces `gz=true` + `rviz=true` |
+| `enable_mapping` | bool | `false` | `true`, `false` | Start slam_toolbox for SLAM mapping |
+| `mapping_mode` | string | `online_async` | `online_async`, `online_sync` | SLAM algorithm mode |
+| `slam_robot` | string | `tb1` | `tb1`, `tb2`, `tb3`, `all` | Which robot(s) run SLAM |
 
-> **`ros_ui` takes priority** — it overrides both `gz` and `rviz` flags for quick full-UI startup.
 
-### Launch Examples
-
-```bash
-# Default: 3 robots, empty world, headless
-ros2 launch multi_tb3_system robot.launch.py
-
-# Full UI (Gazebo + RViz), 3 robots, empty world
-ros2 launch multi_tb3_system robot.launch.py ros_ui:=true
-
-# Full UI, obstacle course
-ros2 launch multi_tb3_system robot.launch.py world:=pillars ros_ui:=true
-
-# Full UI, CPR office environment
-ros2 launch multi_tb3_system robot.launch.py world:=office ros_ui:=true
-
-# 2 robots only (leader + 1 follower), full UI
-ros2 launch multi_tb3_system robot.launch.py nBurger:=1 ros_ui:=true
-
-# RViz only, no Gazebo window (good for WSL2 without GPU)
-ros2 launch multi_tb3_system robot.launch.py rviz:=true
-
-# Real robot mode (wall clock, no simulation)
-ros2 launch multi_tb3_system robot.launch.py use_sim_time:=false
-
-# Headless with only 1 follower, wall clock
-ros2 launch multi_tb3_system robot.launch.py nBurger:=1 use_sim_time:=false
-```
+> **`slam_robot=all`** — Runs one slam_toolbox instance per robot; each builds its own namespaced map (`/tbX/map`). Maps can later be merged using slam_toolbox's merge utility.
 
 ---
 
@@ -331,10 +277,12 @@ ros2_ws/src/multi_tb3_system/
 │   ├── gazebo.launch.py            # Gz server + optional GUI + clock bridge
 │   ├── spawn_robots.launch.py      # Dynamic N+1 robot spawning (OpaqueFunction)
 │   ├── followers.launch.py         # Follower node launcher (OpaqueFunction)
+│   ├── mapping.launch.py           # 🗺️ SLAM mapping (slam_toolbox online_async)
 │   └── rviz.launch.py              # RViz2 visualization
 │
 ├── config/
 │   ├── follower_params.yaml        # PD gains, distances, LiDAR thresholds
+│   ├── mapping_online_async.yaml   # 🗺️ slam_toolbox params (tuned for TB3 Burger)
 │   └── cpr_office/                 # CPR Office world with custom mesh & textures
 │
 ├── worlds/
@@ -357,20 +305,6 @@ ros2_ws/src/multi_tb3_system/
 ├── README.md                       # This file
 ├── DOCUMENTATION.md                # Detailed system documentation
 └── LAUNCH_CLEANUP.md               # Refactoring changelog & migration guide
-```
-
-### Key Files Explained
-
-- **`launch_common.py`** — **NEW in 0.2.0.** Eliminates cross-file timing/geometry duplication. Single source of truth for:
-  - Spawn positions (`SPAWN_X_STEP`, `SPAWN_Y`, `SPAWN_Z`)
-  - Staggered timing (`SPAWN_DELAY_STEP`, `FOLLOWER_INIT_BUFFER`)
-  - Follower count limits (`MIN_FOLLOWERS`, `MAX_FOLLOWERS`)
-  - Helper functions (`spawn_x`, `spawn_delay`, `follower_start_delay`, `clamp_followers`, `read_burger_urdf`)
-
-- **`robot.launch.py`** — **NEW in 0.2.0.** Replaces the hardcoded legacy trio with a single, flexible entry point supporting dynamic `nBurger` (1–2 followers).
-
-- **`LAUNCH_CLEANUP.md`** — **NEW in 0.2.0.** Details what was deleted (legacy launchers, stubs, old docs) and how to migrate scripts/habits to the new entry point.
-
 ---
 
 ## ⚙️ Follower Parameters
@@ -392,71 +326,6 @@ Tunable in [`config/follower_params.yaml`](config/follower_params.yaml):
 
 ---
 
-## 🌍 Simulation Worlds
-
-### `empty.world`
-Flat ground plane with directional lighting. Best for validating convoy formation, following behavior, and control tuning with no external disturbances.
-
-### `pillars.world`
-Six static cylindrical pillars (`r = 0.10m, h = 0.50m`) arranged in a staggered slalom pattern:
-
-```
-Direction of travel: ──────────────────────────────►
-
-Y+ ●  P1        P3        P5
-       (1.5, 0.5) (3.5, 0.5) (5.5, 0.5)
-
-Y- ●      P2        P4        P6
-       (2.5,-0.5) (4.5,-0.5) (6.5,-0.5)
-```
-
-Used to verify that followers **reject static obstacles** (cluster size filters, or not in forward sector) and continue tracking only the moving robot ahead. The convoy should steer around the pillars while maintaining cohesion.
-
-### `office.world`
-A complex indoor office environment (`config/cpr_office/worlds/office_cpr.world`) with custom meshes and textures. This world is useful for testing the convoy system in a realistic, confined indoor space with walls, doorways, and various clutter.
-
----
-
-## 🔧 Gazebo + ROS Bridge Notes
-
-### Multi-Robot Topic Isolation
-
-The standard TurtleBot3 `model.sdf` uses bare DiffDrive topic names (`cmd_vel`, `odom`) which Gazebo Sim publishes **globally** — with multiple robots all sharing `/cmd_vel` and `/odom`, the system is non-functional.
-
-**Solution — `generate_sdf.py`:**  
-At launch time, each robot's SDF is patched with absolute topic paths before spawning:
-
-```
-cmd_vel      →  /tb1/cmd_vel      (unique per robot)
-odom         →  /tb1/odom
-scan         →  /tb1/scan
-joint_states →  /tb1/joint_states
-frame_id     →  tb1/odom          (TF frame isolation)
-```
-
-Patched SDFs are written to `/tmp/multi_tb3_<ns>.sdf`. The bridge maps Gz `/tb1/scan` ↔ ROS `/tb1/scan` directly — **no remapping required**.
-
-### QoS Compatibility
-
-| Topic | ROS QoS | Notes |
-|---|---|---|
-| `/tbX/scan` | Best Effort, Volatile | Sensor data — loss tolerable |
-| `/tbX/odom` | Reliable, Volatile | Odometry — low latency needed |
-| `/tbX/cmd_vel` | Reliable, Volatile | Control commands — must arrive |
-| `/clock` | Best Effort, Volatile | High-frequency sim clock |
-
-### Namespace Behavior
-
-Each robot runs under namespace `/tbX`. Nodes inside the namespace resolve relative topics automatically:
-
-```python
-# follower_node.py (running under /tb2 namespace)
-self.sub = self.create_subscription(LaserScan, 'scan', ...)   # → /tb2/scan
-self.pub = self.create_publisher(Twist, 'cmd_vel', ...) # → /tb2/cmd_vel
-```
-
----
-
 ## 🧩 Modular Sub-Launch Files
 
 Each sub-launch file is independently usable for testing/debugging:
@@ -471,8 +340,108 @@ ros2 launch multi_tb3_system spawn_robots.launch.py nBurger:=2
 # Start follower nodes only (robots must already be spawned and bridged)
 ros2 launch multi_tb3_system followers.launch.py nBurger:=2
 
+# Start mapping only (system must already be running)
+ros2 launch multi_tb3_system mapping.launch.py slam_robot:=tb1
+
+# Start multi-robot mapping (attach to running system)
+ros2 launch multi_tb3_system mapping.launch.py slam_robot:=all
+
 # Open RViz only (system must already be running)
 ros2 launch multi_tb3_system rviz.launch.py
+```
+
+---
+
+## 🗺️ SLAM Mapping
+
+The system integrates `slam_toolbox` (online async mode) for real-time occupancy grid mapping. Mapping supports both single-robot and multi-robot modes.
+
+### Mapping Modes
+
+| Mode | `slam_robot` | Description |
+|---|:---:|---|
+| **Single-robot** | `tb1` (default) | One slam_toolbox instance uses tb1's LiDAR. Publishes to `/map`. TF: `map → tb1/odom` |
+| **Multi-robot** | `all` | One slam_toolbox per robot. Each publishes `/tbX/map`. TF: `tbX/map → tbX/odom` |
+
+### How It Works
+
+```
+                    ┌─────────────────────────────────────┐
+                    │         mapping.launch.py           │
+                    └─────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              ▼                     ▼                     ▼
+    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+    │  slam_toolbox    │  │  map_saver_server │  │lifecycle_manager │
+    │  (per robot)     │  │  (save on demand) │  │  (manages saver) │
+    │                  │  │                  │  │                  │
+    │  /tbX/scan ──►   │  │  /map_save srv   │  │  autostart=true  │
+    │  publishes /map  │  │                  │  │                  │
+    └──────────────────┘  └──────────────────┘  └──────────────────┘
+```
+
+### Quick Start — Mapping
+
+```bash
+# Step 1: Launch system with mapping enabled
+ros2 launch multi_tb3_system robot.launch.py enable_mapping:=true ros_ui:=true
+
+# Step 2: Teleoperate tb1 to explore the environment
+ros2 run multi_tb3_system teleop_controller.py --ros-args -r __ns:=/tb1
+
+# Step 3: Save the map when done exploring
+ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
+```
+
+The saved map consists of two files:
+- `my_map.pgm` — occupancy grid image
+- `my_map.yaml` — metadata (resolution, origin, thresholds)
+
+### Multi-Robot Mapping
+
+When `slam_robot:=all`, each robot builds its own map independently:
+
+```bash
+ros2 launch multi_tb3_system robot.launch.py enable_mapping:=true slam_robot:=all ros_ui:=true
+```
+
+| Robot | Map Topic | Map Frame | Scan Source |
+|---|---|---|---|
+| tb1 | `/tb1/map` | `tb1/map` | `/tb1/scan` |
+| tb2 | `/tb2/map` | `tb2/map` | `/tb2/scan` |
+| tb3 | `/tb3/map` | `tb3/map` | `/tb3/scan` |
+
+Maps can later be merged using:
+```bash
+ros2 launch slam_toolbox merge_maps_kinematic_launch.py
+```
+
+### Mapping Parameters
+
+Tunable in [`config/mapping_online_async.yaml`](config/mapping_online_async.yaml):
+
+| Parameter | Default | Description |
+|---|:---:|---|
+| `resolution` | `0.05` | Map cell size (m/pixel) |
+| `max_laser_range` | `3.5` | LDS-01 max range (m) |
+| `min_laser_range` | `0.12` | LDS-01 min range (m) |
+| `minimum_travel_distance` | `0.3` | Min distance (m) before new scan is processed |
+| `minimum_travel_heading` | `0.3` | Min rotation (rad) before new scan is processed |
+| `map_update_interval` | `3.0` | Seconds between map publications |
+| `do_loop_closing` | `true` | Enable loop closure detection |
+| `loop_search_maximum_distance` | `3.0` | Max distance (m) for loop closure search |
+
+### Standalone Mapping (Without Full System)
+
+If the convoy is already running, you can attach mapping separately:
+
+```bash
+# Single robot — subscribe to tb1's existing /tb1/scan
+ros2 launch multi_tb3_system mapping.launch.py slam_robot:=tb1
+
+# All robots
+ros2 launch multi_tb3_system mapping.launch.py slam_robot:=all
 ```
 
 ---
@@ -503,6 +472,20 @@ ros2 launch multi_tb3_system robot.launch.py ros_ui:=true
 # Then in another terminal:
 ros2 node list | grep follower
 ros2 node info /tb2/follower_node
+
+# ── Mapping-specific debugging ────────────────────────────────────────
+
+# Check if slam_toolbox is running
+ros2 node list | grep slam_toolbox
+
+# Verify map is being published
+ros2 topic echo /map --once
+
+# Check slam_toolbox TF (should show map → tb1/odom)
+ros2 run tf2_tools view_frames
+
+# Monitor map update rate
+ros2 topic hz /map
 ```
 
 ---
@@ -566,10 +549,32 @@ Normal during the first ~2 seconds while Gazebo initialises and `/clock` bridge 
 
 Check the staggered timing:
 - tb1 spawns at t=0s
-- tb2 spawns at t=3s, follower starts at t=5s
-- tb3 spawns at t=6s, follower starts at t=8s
+- tb2 spawns at t=5s, follower starts at t=7s
+- tb3 spawns at t=10s, follower starts at t=12s
 
-Wait at least 8 seconds after launch before checking. If still no followers after 10s, check launch terminal for errors in `followers.launch.py` OpaqueFunction.
+Wait at least 12 seconds after launch before checking. If still no followers after 15s, check launch terminal for errors in `followers.launch.py` OpaqueFunction.
+
+### Mapping: no `/map` topic or empty map
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| No `/map` topic | slam_toolbox not started | Verify `enable_mapping:=true` or launch `mapping.launch.py` standalone |
+| `/map` exists but empty | No scan data arriving | Check `ros2 topic hz /tb1/scan` — if 0 Hz, bridge or SDF issue |
+| Map doesn't grow | Robot not moving enough | slam_toolbox requires `minimum_travel_distance` (0.3m) of motion between scans |
+| TF error in RViz for map | Wrong fixed frame | Set RViz fixed frame to `map` (single) or `tb1/map` (multi) |
+| Multi-robot: maps overlap incorrectly | TF tree conflict | Each robot uses `tbX/map` frame — ensure RViz displays the correct one |
+
+```bash
+# Verify slam_toolbox is receiving scans
+ros2 topic hz /tb1/scan
+
+# Check slam_toolbox node is alive and configured
+ros2 node info /slam_toolbox   # single-robot mode
+ros2 node info /tb1/slam_toolbox  # multi-robot mode
+
+# Force-save a map snapshot
+ros2 run nav2_map_server map_saver_cli -f /tmp/debug_map
+```
 
 ---
 
@@ -577,7 +582,8 @@ Wait at least 8 seconds after launch before checking. If still no followers afte
 
 - **[`DOCUMENTATION.md`](DOCUMENTATION.md)** — Detailed system architecture, data flow, component descriptions
 - **[`LAUNCH_CLEANUP.md`](LAUNCH_CLEANUP.md)** — What was deleted in v0.2.0, migration guide, before/after examples
-- **[`config/follower_params.yaml`](config/follower_params.yaml)** — All tunable parameters with defaults
+- **[`config/follower_params.yaml`](config/follower_params.yaml)** — Follower tuning parameters with defaults
+- **[`config/mapping_online_async.yaml`](config/mapping_online_async.yaml)** — slam_toolbox SLAM parameters (tuned for TB3)
 - **`scripts/*.py`** — Source code with extensive docstrings
 
 ---
@@ -587,7 +593,8 @@ Wait at least 8 seconds after launch before checking. If still no followers afte
 | Area | Description |
 |---|---|
 | **Nav2 integration** | Replace PD follower with Nav2 local planner for obstacle-aware path execution |
-| **SLAM** | Implement `slam_toolbox` node in `mapping.launch.py` for live map building |
+| **Localization** | Add AMCL localization using maps built by slam_toolbox |
+| **Multi-robot map merging** | Automated merge of per-robot maps into a single global occupancy grid |
 | **Real robot deployment** | Use `use_sim_time:=false` + real hardware bridges for physical TurtleBot3 units |
 | **Multi-machine DDS** | Configure Fast-DDS discovery server for multi-PC convoy over LAN |
 | **Dynamic follower count** | Extend `nBurger` beyond 2 with automatic URDF/SDF generation for 4+ robots |
@@ -603,12 +610,21 @@ Wait at least 8 seconds after launch before checking. If still no followers afte
 | Field | Value |
 |---|---|
 | **Package name** | `multi_tb3_system` |
-| **Version** | `0.2.0` |
+| **Version** | `0.3.0` |
 | **Build system** | `ament_cmake` + `ament_cmake_python` |
 | **License** | Apache 2.0 |
 | **ROS distro** | Jazzy Jalisco |
 | **Gazebo** | Harmonic (gz-sim 8.x) |
 | **Python** | 3.12 |
+
+### What's New in v0.3.0
+
+- **SLAM mapping** — `slam_toolbox` online_async integration via `mapping.launch.py`
+- **Single-robot mapping** — Teleoperate tb1 to build an occupancy grid map
+- **Multi-robot mapping** — `slam_robot:=all` runs per-robot slam_toolbox instances with namespaced maps
+- **Map saving** — Integrated `nav2_map_server` map_saver_server for on-demand map persistence
+- **New launch args** — `enable_mapping`, `mapping_mode`, `slam_robot` on `robot.launch.py`
+- **Mapping config** — `config/mapping_online_async.yaml` tuned for TurtleBot3 Burger LDS-01 (0.12–3.5m)
 
 ### What's New in v0.2.0
 

@@ -21,6 +21,7 @@ install(PROGRAMS
   scripts/teleop_controller.py
   scripts/laser_processor.py
   scripts/safety_controller.py
+  scripts/convoy_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

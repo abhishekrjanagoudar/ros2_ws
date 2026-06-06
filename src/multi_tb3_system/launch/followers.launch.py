@@ -34,14 +34,35 @@ def _launch_setup(context, *args, **kwargs):
     params_file = os.path.join(pkg_share, 'config', 'follower_params.yaml')
 
     actions = []
-    for i in range(2, n_burgers + 2):   # tb2, tb3
-        ns   = f'tb{i}'
+    
+    # Start the convoy path publisher on the leader (tb1)
+    convoy_pub_node = Node(
+        package='multi_tb3_system',
+        executable='convoy_publisher.py',
+        name='convoy_publisher',
+        namespace='tb1',
+        parameters=[{'use_sim_time': use_sim_time}],
+        output='screen',
+        emulate_tty=True,
+    )
+    # The leader spawns at t=0, so publisher can start right away (or with slight delay)
+    actions.append(TimerAction(period=2.0, actions=[convoy_pub_node]))
+
+    for i in range(2, n_burgers + 2):   # tb2, tb3, ...
+        ns        = f'tb{i}'
+        leader_ns = 'tb1'               # In Convoy architecture, everyone follows tb1's path
         node = Node(
             package='multi_tb3_system',
             executable='follower_node.py',
             name='follower_node',
             namespace=ns,
-            parameters=[params_file, {'use_sim_time': use_sim_time}],
+            parameters=[
+                params_file,
+                {
+                    'use_sim_time': use_sim_time,
+                    'leader_ns':    leader_ns,   # Convoy path is /tb1/convoy_path
+                },
+            ],
             output='screen',
             emulate_tty=True,
         )
