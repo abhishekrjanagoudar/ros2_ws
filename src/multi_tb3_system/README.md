@@ -232,7 +232,7 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 
 | Argument | Type | Default | Allowed Values | Description |
 |---|:---:|:---:|---|---|
-| `world` | string | `empty` | `empty`, `pillars` | Gazebo world to load |
+| `world` | string | `empty` | `empty`, `pillars`, `office` | Gazebo world to load |
 | `nBurger` | int | `2` | `1`, `2` | Number of follower robots (total = nBurger + 1) |
 | `use_sim_time` | bool | `true` | `true`, `false` | Use Gazebo simulation clock or wall clock |
 | `gz` | bool | `false` | `true`, `false` | Show Gazebo 3D viewer window |
@@ -252,6 +252,9 @@ ros2 launch multi_tb3_system robot.launch.py ros_ui:=true
 
 # Full UI, obstacle course
 ros2 launch multi_tb3_system robot.launch.py world:=pillars ros_ui:=true
+
+# Full UI, CPR office environment
+ros2 launch multi_tb3_system robot.launch.py world:=office ros_ui:=true
 
 # 2 robots only (leader + 1 follower), full UI
 ros2 launch multi_tb3_system robot.launch.py nBurger:=1 ros_ui:=true
@@ -331,7 +334,8 @@ ros2_ws/src/multi_tb3_system/
 │   └── rviz.launch.py              # RViz2 visualization
 │
 ├── config/
-│   └── follower_params.yaml        # PD gains, distances, LiDAR thresholds
+│   ├── follower_params.yaml        # PD gains, distances, LiDAR thresholds
+│   └── cpr_office/                 # CPR Office world with custom mesh & textures
 │
 ├── worlds/
 │   ├── empty.world                 # Flat ground plane
@@ -407,6 +411,9 @@ Y- ●      P2        P4        P6
 ```
 
 Used to verify that followers **reject static obstacles** (cluster size filters, or not in forward sector) and continue tracking only the moving robot ahead. The convoy should steer around the pillars while maintaining cohesion.
+
+### `office.world`
+A complex indoor office environment (`config/cpr_office/worlds/office_cpr.world`) with custom meshes and textures. This world is useful for testing the convoy system in a realistic, confined indoor space with walls, doorways, and various clutter.
 
 ---
 
@@ -608,6 +615,7 @@ Wait at least 8 seconds after launch before checking. If still no followers afte
 - **Modular launch system** — Single `robot.launch.py` entry point replacing legacy trio
 - **Shared configuration module** — `launch_common.py` eliminates cross-file duplication and timing drift risk
 - **Cleaned codebase** — Removed 7 obsolete/unimplemented files (legacy launchers, stubs, outdated docs)
+- **New simulation world** — Added support for the `office` world (CPR Office) with automatic texture path injection
 - **Dynamic robot count** — `nBurger=1` or `nBurger=2` at launch (previously hardcoded to 3)
 - **Improved documentation** — This README + LAUNCH_CLEANUP.md migration guide
 

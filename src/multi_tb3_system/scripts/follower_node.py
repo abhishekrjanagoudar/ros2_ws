@@ -125,6 +125,7 @@ class FollowerNode(Node):
 
         # ── State ───────────────────────────────────────────────────────────
         self._no_target_count: int = 0   # frames without a target
+        self._last_target_pos: tuple[float, float] | None = None
 
         self.get_logger().info(
             f"FollowerNode started | "
@@ -151,7 +152,18 @@ class FollowerNode(Node):
             cluster_distance=self.cluster_distance,
             min_cluster_size=self.min_cluster_size,
             max_cluster_size=self.max_cluster_size,
+            last_target_pos=self._last_target_pos,
         )
+
+        # ── Temporal Tracking (Target Lock) Update ──────────────────────────
+        if target:
+            self._last_target_pos = (target.centroid_x, target.centroid_y)
+            self._no_target_count = 0
+        else:
+            self._no_target_count += 1
+            # Clear target lock if lost for > 10 frames (~2 seconds at 5Hz)
+            if self._no_target_count > 10:
+                self._last_target_pos = None
 
         # ── Step 6: Compute control commands ────────────────────────────────
         linear_x, angular_z = self._compute_control(target)
@@ -171,14 +183,12 @@ class FollowerNode(Node):
 
         # ── Debug logging ────────────────────────────────────────────────────
         if target:
-            self._no_target_count = 0
             self.get_logger().debug(
                 f"Target: dist={target.distance:.2f}m "
                 f"angle={math.degrees(target.angle):.1f}° → "
                 f"v={linear_x:.3f} ω={angular_z:.3f}"
             )
         else:
-            self._no_target_count += 1
             if self._no_target_count % 20 == 1:
                 self.get_logger().info(
                     f"No leader detected ({len(all_clusters)} clusters, "

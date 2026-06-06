@@ -3,7 +3,7 @@
 robot.launch.py — main entry point for the multi-TurtleBot3 convoy system.
 
 Args:
-  world          : 'empty' (default) | 'pillars'
+  world          : 'empty' (default) | 'pillars' | 'office'
   nBurger        : follower count, 1–2 (default 2 → 3 robots total)
   use_sim_time   : 'true' (default) | 'false'
   gz             : show Gazebo GUI  'true' | 'false' (default)
@@ -88,7 +88,7 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument('world',        default_value='empty',
-                              description="Gazebo world: 'empty' or 'pillars'."),
+                              description="Gazebo world: 'empty', 'pillars', or 'office'."),
         DeclareLaunchArgument('nBurger',      default_value='2',
                               description='Follower count (1–2). Total robots = nBurger + 1.'),
         DeclareLaunchArgument('use_sim_time', default_value='true',

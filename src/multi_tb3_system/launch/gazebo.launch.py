@@ -43,7 +43,12 @@ def generate_launch_description() -> LaunchDescription:
     # GUI client — LIBGL_ALWAYS_SOFTWARE=1 bypasses broken WSL2 GLX/drisw path
     gz_client = ExecuteProcess(
         cmd=['gz', 'sim', '-g', '-v2', '--force-version', '8'],
-        additional_env={'LIBGL_ALWAYS_SOFTWARE': '1', 'QT_OPENGL': 'software'},
+        additional_env={
+            'LIBGL_ALWAYS_SOFTWARE': '1',
+            'QT_OPENGL': 'software',
+            'GALLIUM_DRIVER': 'llvmpipe',
+            'MESA_LOADER_DRIVER_OVERRIDE': 'llvmpipe'
+        },
         condition=IfCondition(gz),
         output='screen',
     )

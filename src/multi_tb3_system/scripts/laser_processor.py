@@ -208,24 +208,42 @@ def make_clusters(
     return result
 
 
-def select_target_cluster(clusters: List[Cluster]) -> Optional[Cluster]:
+def select_target_cluster(
+    clusters: List[Cluster],
+    last_target_pos: Optional[Tuple[float, float]] = None,
+    lock_radius: float = 0.4,
+) -> Optional[Cluster]:
     """
     Select the best candidate cluster to follow.
 
     Strategy:
-      - Among all valid clusters in the front sector, pick the closest one.
-      - The assumption is that the robot being followed (leader) is the nearest
-        object in the forward direction that isn't a wall (already filtered by
-        max_cluster_size in make_clusters).
+      - If we have a previous target position, find the cluster closest to it
+        (temporal tracking / target lock).
+      - If no valid previous target, or if all clusters are outside the lock radius,
+        pick the cluster closest to the robot.
 
     Args:
         clusters: List of valid Cluster objects
+        last_target_pos: (x, y) centroid of target from previous scan
+        lock_radius: Max distance a cluster can move between scans to keep lock [m]
 
     Returns:
         The closest Cluster, or None if no clusters exist.
     """
     if not clusters:
         return None
+
+    if last_target_pos is not None:
+        lx, ly = last_target_pos
+        # Find the cluster closest to the last known position
+        best_cluster = min(clusters, key=lambda c: math.hypot(c.centroid_x - lx, c.centroid_y - ly))
+        dist_to_last = math.hypot(best_cluster.centroid_x - lx, best_cluster.centroid_y - ly)
+        
+        # If it hasn't jumped too far, maintain lock
+        if dist_to_last <= lock_radius:
+            return best_cluster
+
+    # Fallback to the closest cluster to the robot
     return min(clusters, key=lambda c: c.distance)
 
 
@@ -239,6 +257,7 @@ def process_scan(
     cluster_distance: float = 0.20,
     min_cluster_size: int = 2,
     max_cluster_size: int = 40,
+    last_target_pos: Optional[Tuple[float, float]] = None,
 ) -> Tuple[Optional[Cluster], List[Cluster]]:
     """
     Full pipeline: raw LaserScan → target cluster.
@@ -260,6 +279,7 @@ def process_scan(
         cluster_distance:     Gap threshold for clustering
         min_cluster_size:     Minimum cluster size (noise filter)
         max_cluster_size:     Maximum cluster size (wall filter)
+        last_target_pos:      Previous known target (x,y) for target lock
 
     Returns:
         (target_cluster, all_clusters)
@@ -279,6 +299,6 @@ def process_scan(
     clusters = make_clusters(raw_clusters, min_cluster_size, max_cluster_size)
 
     # Step 5: Select target
-    target = select_target_cluster(clusters)
+    target = select_target_cluster(clusters, last_target_pos=last_target_pos)
 
     return target, clusters
