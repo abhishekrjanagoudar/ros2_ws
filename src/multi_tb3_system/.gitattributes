@@ -1,0 +1,10 @@
+# This package is built and run inside Linux (WSL2 / ROS 2). Executable
+# Python scripts MUST keep LF line endings, or their `#!/usr/bin/env python3`
+# shebang becomes `python3\r` on checkout and the node dies with exit 127.
+# Force LF for all text we care about regardless of the host git autocrlf setting.
+* text=auto eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.world text eol=lf
+*.sdf text eol=lf
+*.launch.py text eol=lf

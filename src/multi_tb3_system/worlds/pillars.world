@@ -19,10 +19,10 @@
   <world name="default">
 
     <!-- ── Physics ────────────────────────────────────────────────────── -->
-    <!-- 4ms step = 250Hz physics. 1ms (1000Hz) is excessive for TurtleBot3 nav  -->
-    <!-- and burns CPU on WSL2. 4ms gives smooth motion with far less overhead.    -->
-    <physics name="4ms" type="ignored">
-      <max_step_size>0.004</max_step_size>
+    <!-- 1ms step = 1000Hz physics. Matches the known-good baseline; larger      -->
+    <!-- steps (4ms) make pose updates burst unevenly → visible GUI stutter.      -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>
 
