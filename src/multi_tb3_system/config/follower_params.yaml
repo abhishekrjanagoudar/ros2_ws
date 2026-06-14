@@ -1,18 +1,29 @@
-# follower_node.py parameters — distances in m, velocities in m/s, angles in deg
+# follower_node.py parameters — Path-Based Convoy (Pure Pursuit)
+# distances in m, velocities in m/s, angles in rad.
+#
+# leader_ns, spawn_offset_x/y are set at launch time by followers.launch.py.
+# Defaults here are fallback-only.
 
 follower_node:
   ros__parameters:
 
-    target_distance:      0.7    # maintain this gap from robot ahead
-    safe_distance:        0.4    # hard-stop if anything closer than this
+    leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
-    kp_linear:            0.8    # linear_vel  = kp_linear  * (dist - target_distance)
-    kp_angular:           2.0    # angular_vel = kp_angular * angle_to_target
+    # ── Convoy spacing ───────────────────────────────────────────────────
+    convoy_spacing:       0.6     # gap per convoy slot [m] (tb2=1x, tb3=2x)
+    goal_tolerance:       0.10    # stop when within this arc-length of goal [m]
 
-    max_linear_velocity:  0.22   # TB3 Burger hardware limit
+    # ── Pure Pursuit ─────────────────────────────────────────────────────
+    lookahead_distance:   0.5     # lookahead point distance along the path [m]
+    kp_linear:            0.8     # forward speed gain on spacing error
+    kp_angular:           1.5     # heading gain (large-misalignment recovery)
+
+    # ── Limits ───────────────────────────────────────────────────────────
+    max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
+    safe_distance:        0.4     # LiDAR hard-stop distance (SafetyController)
 
-    front_angle_deg:      30.0   # ±deg cone ahead used for target detection
-    cluster_distance:     0.20   # max gap between points in same cluster
-    min_cluster_size:     2      # fewer → noise, rejected
-    max_cluster_size:     40     # more  → wall, rejected (TB3 body ≈ 8-12 pts at 0.7m)
+    # ── Control loop / smoothing ─────────────────────────────────────────
+    control_frequency:    50.0    # Hz — cmd_vel publish / control rate
+    max_linear_accel:     1.0     # m/s^2 — command slew limit
+    max_angular_accel:    3.0     # rad/s^2 — command slew limit

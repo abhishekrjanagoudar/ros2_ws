@@ -34,10 +34,12 @@ SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
 # Each robot spawns SPAWN_DELAY_STEP after the previous one; a follower then
 # waits an extra FOLLOWER_INIT_BUFFER so Gazebo + the bridge can settle before
 # cmd_vel starts flowing.
-# 5s between spawns gives Gazebo enough time to fully initialize the world
-# (physics, sensors, DiffDrive) before the next robot entity is created.
-SPAWN_DELAY_STEP      = 5.0
-FOLLOWER_INIT_BUFFER  = 2.0
+# 3s between spawns gives Gazebo enough time to initialize each robot entity
+# (physics, sensors, DiffDrive) before the next is created, while keeping the
+# convoy startup snappy. Followers then wait FOLLOWER_INIT_BUFFER after their
+# robot spawns so the bridge can settle before cmd_vel flows.
+SPAWN_DELAY_STEP      = 3.0
+FOLLOWER_INIT_BUFFER  = 1.0
 
 
 # ─── Follower-count limits ──────────────────────────────────────────────────────
