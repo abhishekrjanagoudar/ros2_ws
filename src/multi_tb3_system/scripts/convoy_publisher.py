@@ -85,6 +85,12 @@ class ConvoyPublisher(Node):
             self.path_msg.poses = self.path_msg.poses[-self.max_poses:]
 
     def publish_path(self):
+        # Persistent-publication contract (R5.1, R5.2, R5.5, R5.6): the path is
+        # published at 50 Hz with a fresh header timestamp on every tick,
+        # regardless of Leader motion. When no Breadcrumb has been recorded yet
+        # (no odom received), an empty Path is still published on schedule.
+        # Followers rely on this steady cadence and timestamp for staleness
+        # detection.
         self.path_msg.header.stamp = self.get_clock().now().to_msg()
         self.path_msg.header.frame_id = self.frame
         self.path_pub.publish(self.path_msg)

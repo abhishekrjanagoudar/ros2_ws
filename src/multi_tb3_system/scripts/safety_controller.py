@@ -23,7 +23,7 @@ from typing import List, Tuple
 # ─── Constants ────────────────────────────────────────────────────────────────
 EMERGENCY_HALF_ANGLE_DEG = 45.0    # Check ±45° in front for emergency stop
 STEER_HALF_ANGLE_DEG     = 60.0    # Check ±60° for steering bias
-STEER_INFLUENCE_RANGE    = 1.0     # Obstacles within this range affect steering (> convoy_spacing=0.8m)
+STEER_INFLUENCE_RANGE    = 1.0     # Obstacles within this range affect steering (> convoy_spacing=0.5m)
 
 
 class SafetyController:

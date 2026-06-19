@@ -4,6 +4,8 @@ followers.launch.py — Path-Based Convoy.
 
 Starts:
   * convoy_publisher on the leader (tb1): publishes /tb1/convoy_path.
+  * one costmap_generator.py per robot (tb1, tb2, tb3, ...): consumes the
+    robot's /scan and publishes a per-robot ``local_costmap`` for visualization.
   * one Pure-Pursuit follower_node.py per follower robot (tb2, tb3, ...).
 
 Each follower subscribes to the shared leader path and tracks it while holding
@@ -17,7 +19,7 @@ spawn_robots.launch.py.
 Args:
   nBurger       : follower count 1–2 (default 2)
   use_sim_time  : 'true' (default) | 'false'
-  convoy_spacing: gap per convoy slot in metres (default 1.0)
+  convoy_spacing: gap per convoy slot in metres (default 0.5)
 """
 
 import os
@@ -32,6 +34,7 @@ from multi_tb3_system.launch_common import (
     SPAWN_Y,
     clamp_followers,
     follower_start_delay,
+    spawn_delay,
     spawn_x,
 )
 
@@ -66,6 +69,26 @@ def _launch_setup(context, *args, **kwargs):
     # Leader spawns at t=0; small delay lets odom + bridge come up first.
     actions.append(TimerAction(period=2.0, actions=[convoy_pub]))
 
+    # ── Per-robot costmap_generator (tb1, tb2, tb3, ...) ─────────────────────
+    # Each robot consumes its own /scan and publishes ``local_costmap`` for
+    # visualization. Started 1.5 s after the robot's spawn so the Gazebo
+    # entity + LaserScan stream are up before the node subscribes.
+    for i in range(1, n_burgers + 2):
+        ns = f'tb{i}'
+        cg_node = Node(
+            package='multi_tb3_system',
+            executable='costmap_generator.py',
+            name='costmap_generator',
+            namespace=ns,
+            parameters=[
+                params_file,   # picks up costmap_size/resolution/publish_rate/stale_timeout from follower_params.yaml
+                {'use_sim_time': use_sim_time},
+            ],
+            output='screen',
+            emulate_tty=True,
+        )
+        actions.append(TimerAction(period=spawn_delay(i) + 1.5, actions=[cg_node]))
+
     # ── Pure-Pursuit followers (tb2, tb3, ...) ───────────────────────────────
     for i in range(2, n_burgers + 2):
         ns = f'tb{i}'
@@ -98,7 +121,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='Follower count (1–2).'),
         DeclareLaunchArgument('use_sim_time',   default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
-        DeclareLaunchArgument('convoy_spacing', default_value='0.8',
-                              description='Gap per convoy slot in metres (must match SPAWN_X_STEP=0.8m).'),
+        DeclareLaunchArgument('convoy_spacing', default_value='0.5',
+                              description='Gap per convoy slot in metres (must match SPAWN_X_STEP=0.5m).'),
         OpaqueFunction(function=_launch_setup),
     ])

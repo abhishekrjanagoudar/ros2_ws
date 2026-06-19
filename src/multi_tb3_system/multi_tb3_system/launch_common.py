@@ -24,8 +24,9 @@ from ament_index_python.packages import get_package_share_directory
 
 
 # ─── Convoy formation geometry ─────────────────────────────────────────────────
-# Robots are spawned in a line behind the leader: tb1 at x=0, tb2 at x=-0.8, ...
-SPAWN_X_STEP = -0.8   # metres between successive robots along x (= convoy_spacing)
+# Robots are spawned in a line behind the leader:
+#   tb1 at x= 0.0, tb2 at x=-0.5, tb3 at x=-1.0.
+SPAWN_X_STEP = -0.5   # metres between successive robots along x (= convoy_spacing = 0.5 m)
 SPAWN_Y      =  0.0   # all robots share the same y
 SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
 
@@ -60,13 +61,13 @@ def clamp_followers(n: int) -> int:
 
 
 def spawn_x(index: int) -> float:
-    """X spawn position for robot *index* (1-based: tb1=0.0, tb2=-1.0, ...)."""
+    """X spawn position for robot *index* (1-based: tb1=0.0, tb2=-0.5, tb3=-1.0)."""
     # ``+ 0.0`` normalises the i=1 case from -0.0 to 0.0.
     return (index - 1) * SPAWN_X_STEP + 0.0
 
 
 def spawn_delay(index: int) -> float:
-    """Spawn delay (s) for robot *index* (1-based: tb1=0.0, tb2=3.0, ...)."""
+    """Spawn delay (s) for robot *index* (1-based: tb1=0.0, tb2=4.0, tb3=8.0)."""
     return (index - 1) * SPAWN_DELAY_STEP
 
 

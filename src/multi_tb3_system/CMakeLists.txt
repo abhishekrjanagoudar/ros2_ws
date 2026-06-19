@@ -16,12 +16,21 @@ find_package(rclpy REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
 
 # ─── Python executables (scripts/) ────────────────────────────────────────────
+# Note: costmap_utils.py, convoy_tracking.py, and follower_state.py are pure
+# Python modules (no shebang) imported at runtime by the executable scripts via
+# sys.path.insert of the script directory. Installing them via install(PROGRAMS)
+# places them in lib/${PROJECT_NAME} alongside the executables so the imports
+# resolve.
 install(PROGRAMS
+  scripts/convoy_publisher.py
+  scripts/convoy_tracking.py
+  scripts/costmap_generator.py
+  scripts/costmap_utils.py
   scripts/follower_node.py
-  scripts/teleop_controller.py
+  scripts/follower_state.py
   scripts/laser_processor.py
   scripts/safety_controller.py
-  scripts/convoy_publisher.py
+  scripts/teleop_controller.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

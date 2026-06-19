@@ -10,7 +10,7 @@ follower_node:
     leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
     # ── Convoy spacing ───────────────────────────────────────────────────
-    convoy_spacing:       0.8     # gap per convoy slot [m] (tb2=1x, tb3=2x)
+    convoy_spacing:       0.5     # gap per convoy slot [m] (tb2=1x, tb3=2x)
     goal_tolerance:       0.4    # stop when within this distance of goal [m]
 
     # ── Pure Pursuit ─────────────────────────────────────────────────────
@@ -21,9 +21,24 @@ follower_node:
     # ── Limits ───────────────────────────────────────────────────────────
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
-    safe_distance:        0.6     # LiDAR hard-stop distance (SafetyController) — triggers 0.2m before convoy slot
+    safe_distance:        0.35    # LiDAR hard-stop distance (SafetyController) — strictly < convoy_spacing=0.5m so preceding member at the nominal gap does not trigger emergency stop
 
     # ── Control loop / smoothing ─────────────────────────────────────────
     control_frequency:    50.0    # Hz — cmd_vel publish / control rate
     max_linear_accel:     1.0     # m/s^2 — command slew limit
     max_angular_accel:    3.0     # rad/s^2 — command slew limit
+
+    # ── Local costmap (LiDAR-derived occupancy grid) ─────────────────────
+    costmap_size:                3.0   # span of square local costmap [m]
+    costmap_resolution:          0.05  # cell size [m] (3.0/0.05 = 60x60 = 3600 cells)
+    costmap_publish_rate:        10.0  # Hz (>=5 Hz) — informational; in-process build runs each control cycle
+    costmap_stale_timeout:       1.0   # clear costmap if no new scan within this many seconds
+
+    # ── Obstacle-avoidance state machine ─────────────────────────────────
+    detour_forward_min_vel:      0.06  # forward creep maintained during DETOUR [m/s]
+    stationary_deadlock_timeout: 2.0   # escalate to SEARCH after this many continuous stationary seconds [s]
+    emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
+    search_angular_velocity:     0.6   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity)
+
+    # ── Persistent leader tracking ───────────────────────────────────────
+    breadcrumb_timeout:          10.0  # stop only after no newer breadcrumbs for this long AND final goal reached [s] (range: 0.1 to 600)
