@@ -98,7 +98,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='Follower count (1–2).'),
         DeclareLaunchArgument('use_sim_time',   default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
-        DeclareLaunchArgument('convoy_spacing', default_value='0.6',
-                              description='Gap per convoy slot in metres.'),
+        DeclareLaunchArgument('convoy_spacing', default_value='0.8',
+                              description='Gap per convoy slot in metres (must match SPAWN_X_STEP=0.8m).'),
         OpaqueFunction(function=_launch_setup),
     ])

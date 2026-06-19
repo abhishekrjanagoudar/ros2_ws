@@ -133,6 +133,7 @@ class FollowerNode(Node):
         self._scan: Optional[LaserScan] = None
         self._last_lin = 0.0
         self._last_ang = 0.0
+        self._last_closest_idx = 0
 
         qos = QoSProfile(depth=10,
                          reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -175,10 +176,6 @@ class FollowerNode(Node):
         path = self._path
 
         # 1. Goal point: arc-length `gap` back from the newest path point.
-        #    If the leader hasn't travelled `gap` yet, clamp to the path start
-        #    (goal_idx=0) instead of holding — so a follower that begins behind
-        #    its slot closes the gap immediately rather than waiting for the
-        #    leader to drive far ahead.
         goal_idx = 0
         acc = 0.0
         for i in range(len(path) - 1, 0, -1):
@@ -187,16 +184,39 @@ class FollowerNode(Node):
             if acc >= self._gap:
                 goal_idx = i - 1
                 break
-        goal = path[goal_idx]
+        
+        if acc >= self._gap:
+            goal = path[goal_idx]
+        else:
+            # Path is shorter than the convoy gap (e.g. leader just spawned or hasn't moved enough).
+            # Extrapolate backward from the start of the path so the follower stays parked 
+            # exactly `gap` distance behind the leader's starting position instead of driving into it.
+            remaining = self._gap - acc
+            dx, dy = 1.0, 0.0  # default to +X (spawn heading)
+            for i in range(1, len(path)):
+                dist = math.hypot(path[i][0] - path[0][0], path[i][1] - path[0][1])
+                if dist > 0.01:
+                    dx = (path[i][0] - path[0][0]) / dist
+                    dy = (path[i][1] - path[0][1]) / dist
+                    break
+            goal = (path[0][0] - remaining * dx, path[0][1] - remaining * dy)
 
-        # 2. Closest path point to the robot (search up to the goal).
-        closest_idx = 0
+        # 2. Closest path point to the robot.
+        #    Optimization: Since the robot moves forward along the path, start searching
+        #    from the previous closest point rather than the beginning (O(1) instead of O(N)).
+        #    We bound it by `goal_idx` and wrap safely if the path was truncated.
+        start_idx = min(self._last_closest_idx, goal_idx)
+        closest_idx = start_idx
         best = float('inf')
-        for i in range(goal_idx + 1):
+        for i in range(start_idx, goal_idx + 1):
             d = math.hypot(path[i][0] - rx, path[i][1] - ry)
             if d < best:
                 best = d
                 closest_idx = i
+            elif d > best + 0.5:
+                # Early exit: if distance starts growing significantly, we passed the closest point
+                break
+        self._last_closest_idx = closest_idx
 
         # 3. Pure Pursuit lookahead point (capped at the goal).
         look = goal
@@ -212,22 +232,37 @@ class FollowerNode(Node):
         Ld = max(math.hypot(lx, ly), 1e-3)
         alpha = math.atan2(ly, lx)
 
-        # 4. Longitudinal control: forward distance (robot frame) to the goal.
-        #    Projecting onto the heading means the follower drives as soon as
-        #    its target is ahead, and stops/backs off when it reaches the gap.
-        gx, _gy = _to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
-        spacing_err = gx
+        # 4. Longitudinal control.
+        #    Use the FULL Euclidean distance to the goal as the stopping
+        #    criterion so the follower always drives to its assigned slot,
+        #    even when the leader is stationary and the goal is laterally
+        #    offset from the robot's heading.
+        #    gx (forward component) is still used to scale speed naturally
+        #    (positive → approach, ≤ 0 → at/past goal) but NOT for the
+        #    stop decision.
+        gx, gy = _to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
+        dist_to_goal = math.hypot(gx, gy)
 
         # 5. Compute velocities.
-        if spacing_err <= self.goal_tol:
+        if dist_to_goal <= self.goal_tol:
+            # Within tolerance of the target slot → hold position.
             linear_x = 0.0
             angular_z = 0.0
         else:
-            linear_x = self.kp_linear * spacing_err
+            # Speed proportional to forward progress; never reverse.
+            # When the goal is behind or to the side, drive slowly forward
+            # while the angular correction steers the robot toward the goal.
+            forward_drive = max(0.0, gx)            # clamp negatives to 0
+            # Blend forward drive with a minimum creep so the robot always
+            # turns toward the goal even when gx ≈ 0 (goal is to the side).
+            creep = self.kp_linear * dist_to_goal * 0.3  # gentle creep
+            linear_x = self.kp_linear * max(forward_drive, creep)
             # Pure Pursuit curvature -> angular velocity.
             curvature = 2.0 * ly / (Ld * Ld)
             angular_z = linear_x * curvature
-            # Strong misalignment: rotate to face the path, creep forward.
+            # Strong misalignment: rotate in place (or near-place) to face
+            # the lookahead before driving.  Activated if the goal is mostly
+            # to the side rather than ahead.
             if abs(alpha) > 0.8:
                 angular_z = self.kp_angular * alpha
                 linear_x *= 0.3

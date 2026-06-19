@@ -24,8 +24,8 @@ from ament_index_python.packages import get_package_share_directory
 
 
 # ─── Convoy formation geometry ─────────────────────────────────────────────────
-# Robots are spawned in a line behind the leader: tb1 at x=0, tb2 at x=-1, ...
-SPAWN_X_STEP = -1.0   # metres between successive robots along x
+# Robots are spawned in a line behind the leader: tb1 at x=0, tb2 at x=-0.8, ...
+SPAWN_X_STEP = -0.8   # metres between successive robots along x (= convoy_spacing)
 SPAWN_Y      =  0.0   # all robots share the same y
 SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
 
@@ -34,12 +34,19 @@ SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
 # Each robot spawns SPAWN_DELAY_STEP after the previous one; a follower then
 # waits an extra FOLLOWER_INIT_BUFFER so Gazebo + the bridge can settle before
 # cmd_vel starts flowing.
-# 3s between spawns gives Gazebo enough time to initialize each robot entity
-# (physics, sensors, DiffDrive) before the next is created, while keeping the
-# convoy startup snappy. Followers then wait FOLLOWER_INIT_BUFFER after their
-# robot spawns so the bridge can settle before cmd_vel flows.
-SPAWN_DELAY_STEP      = 3.0
-FOLLOWER_INIT_BUFFER  = 1.0
+#
+# Observed startup timeline (Gazebo Harmonic on WSL2):
+#   t=0      : tb1 spawns and its bridge is live within ~1.5s.
+#   t=STEP   : tb2 spawn command fires; Gazebo entity creation takes ~2s,
+#              the DiffDrive plugin begins publishing odom only AFTER that.
+#   t=STEP+3 : bridge is confirmed live + first odom message received → safe
+#              to start the follower control loop.
+#
+# SPAWN_DELAY_STEP=4 leaves 4 s for each robot's full Gazebo + bridge init
+# before the next robot begins. FOLLOWER_INIT_BUFFER=3 adds 3 s on top of the
+# robot's own spawn delay so the follower never fires before odom is available.
+SPAWN_DELAY_STEP      = 4.0   # was 3.0 — bumped to cover full Gazebo entity init
+FOLLOWER_INIT_BUFFER  = 3.0   # was 1.0 — bumped so follower starts after first odom
 
 
 # ─── Follower-count limits ──────────────────────────────────────────────────────

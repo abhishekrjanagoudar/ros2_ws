@@ -27,8 +27,8 @@ class ConvoyPublisher(Node):
     def __init__(self):
         super().__init__('convoy_publisher')
 
-        self.declare_parameter('max_path_poses', 2000)
-        self.declare_parameter('path_resolution', 0.05)
+        self.declare_parameter('max_path_poses', 5000)
+        self.declare_parameter('path_resolution', 0.02)
         self.declare_parameter('path_frame', 'world')
         self.declare_parameter('spawn_offset_x', 0.0)
         self.declare_parameter('spawn_offset_y', 0.0)
@@ -53,8 +53,8 @@ class ConvoyPublisher(Node):
         self.path_msg = Path()
         self.path_msg.header.frame_id = self.frame
 
-        # Publish path at 10 Hz
-        self.timer = self.create_timer(0.1, self.publish_path)
+        # Publish path at 50 Hz to match follower control loops
+        self.timer = self.create_timer(0.02, self.publish_path)
 
         self.get_logger().info(
             f"ConvoyPublisher | frame={self.frame} | "

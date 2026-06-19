@@ -10,8 +10,8 @@ follower_node:
     leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
     # ── Convoy spacing ───────────────────────────────────────────────────
-    convoy_spacing:       0.6     # gap per convoy slot [m] (tb2=1x, tb3=2x)
-    goal_tolerance:       0.10    # stop when within this arc-length of goal [m]
+    convoy_spacing:       0.8     # gap per convoy slot [m] (tb2=1x, tb3=2x)
+    goal_tolerance:       0.4    # stop when within this distance of goal [m]
 
     # ── Pure Pursuit ─────────────────────────────────────────────────────
     lookahead_distance:   0.5     # lookahead point distance along the path [m]
@@ -21,7 +21,7 @@ follower_node:
     # ── Limits ───────────────────────────────────────────────────────────
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
-    safe_distance:        0.4     # LiDAR hard-stop distance (SafetyController)
+    safe_distance:        0.6     # LiDAR hard-stop distance (SafetyController) — triggers 0.2m before convoy slot
 
     # ── Control loop / smoothing ─────────────────────────────────────────
     control_frequency:    50.0    # Hz — cmd_vel publish / control rate
