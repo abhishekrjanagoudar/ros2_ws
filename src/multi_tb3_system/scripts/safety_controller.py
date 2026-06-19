@@ -85,23 +85,22 @@ class SafetyController:
         Returns:
             (safe_linear_x, safe_angular_z)
         """
-        emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
         steer_half     = math.radians(STEER_HALF_ANGLE_DEG)
+        emergency = self.is_emergency(
+            ranges=ranges,
+            angle_min=angle_min,
+            angle_increment=angle_increment,
+            range_min=range_min,
+        )
 
         # Accumulate min distances per side for steering
         min_left  = float('inf')
         min_right = float('inf')
-        emergency = False
 
         for i, r in enumerate(ranges):
             if not math.isfinite(r) or r < range_min:
                 continue
             angle = angle_min + i * angle_increment
-
-            # ─── Emergency zone (narrow front cone) ───
-            if abs(angle) <= emergency_half:
-                if r < self.safe_distance:
-                    emergency = True
 
             # ─── Steering zone (wider front cone) ────
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
@@ -132,6 +131,23 @@ class SafetyController:
         angular_z = max(-self.max_angular_vel,  min(angular_z, self.max_angular_vel))
 
         return linear_x, angular_z
+
+    def is_emergency(
+        self,
+        ranges: List[float],
+        angle_min: float,
+        angle_increment: float,
+        range_min: float = 0.12,
+    ) -> bool:
+        """Return True if an obstacle is inside the front emergency cone."""
+        emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
+        for i, r in enumerate(ranges):
+            if not math.isfinite(r) or r < range_min:
+                continue
+            angle = angle_min + i * angle_increment
+            if abs(angle) <= emergency_half and r < self.safe_distance:
+                return True
+        return False
 
     # ──────────────────────────────────────────────────────────────────────────
 

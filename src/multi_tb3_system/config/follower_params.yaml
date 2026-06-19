@@ -42,3 +42,14 @@ follower_node:
 
     # ── Persistent leader tracking ───────────────────────────────────────
     breadcrumb_timeout:          10.0  # stop only after no newer breadcrumbs for this long AND final goal reached [s] (range: 0.1 to 600)
+
+costmap_generator:
+  ros__parameters:
+
+    # Keep these aligned with follower_node's in-process costmap settings.
+    costmap_size:                3.0
+    costmap_resolution:          0.05
+    costmap_publish_rate:        10.0
+    costmap_stale_timeout:       1.0
+    costmap_frame:               ''
+    range_min_override:          0.0

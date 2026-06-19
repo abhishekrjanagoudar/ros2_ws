@@ -28,7 +28,6 @@ populates the ``OccupancyGrid`` header/info before publishing on
 ``local_costmap`` (task 5.3, validated against task 5.2's output).
 """
 
-import math
 import os
 import sys
 
@@ -46,7 +45,7 @@ _scripts_dir = os.path.dirname(os.path.abspath(__file__))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
-from costmap_utils import build_costmap, Costmap  # noqa: E402  (sys.path setup above)
+from costmap_utils import build_costmap  # noqa: E402  (sys.path setup above)
 
 
 class CostmapGenerator(Node):
@@ -59,18 +58,23 @@ class CostmapGenerator(Node):
         super().__init__('costmap_generator')
 
         # ── Parameters ──────────────────────────────────────────────────────
-        self.declare_parameter('size_m', 3.0)
-        self.declare_parameter('resolution', 0.05)
-        self.declare_parameter('publish_rate', 10.0)
-        self.declare_parameter('stale_timeout', 1.0)
+        self.declare_parameter('costmap_size', 3.0)
+        self.declare_parameter('costmap_resolution', 0.05)
+        self.declare_parameter('costmap_publish_rate', 10.0)
+        self.declare_parameter('costmap_stale_timeout', 1.0)
         self.declare_parameter('costmap_frame', '')
         self.declare_parameter('range_min_override', 0.0)
+        # Backward-compatible aliases for direct/manual launches.
+        self.declare_parameter('size_m', 0.0)
+        self.declare_parameter('resolution', 0.0)
+        self.declare_parameter('publish_rate', 0.0)
+        self.declare_parameter('stale_timeout', 0.0)
 
         gp = lambda n: self.get_parameter(n).value
-        self.size_m             = float(gp('size_m'))
-        self.resolution         = float(gp('resolution'))
-        self.publish_rate       = float(gp('publish_rate'))
-        self.stale_timeout      = float(gp('stale_timeout'))
+        self.size_m             = float(gp('size_m') or gp('costmap_size'))
+        self.resolution         = float(gp('resolution') or gp('costmap_resolution'))
+        self.publish_rate       = float(gp('publish_rate') or gp('costmap_publish_rate'))
+        self.stale_timeout      = float(gp('stale_timeout') or gp('costmap_stale_timeout'))
         self.costmap_frame      = str(gp('costmap_frame'))
         self.range_min_override = float(gp('range_min_override'))
 
@@ -106,7 +110,7 @@ class CostmapGenerator(Node):
         self._scan = None        # type: LaserScan | None
         self._scan_time = None   # type: rclpy.time.Time | None
         # Most recently published Costmap; kept for inspection/tests.
-        self._last_cm = None     # type: Costmap | None
+        self._last_cm = None
         # Used to log a single info-level confirmation line on first publish.
         self._first_publish = True
 

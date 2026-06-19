@@ -61,7 +61,6 @@ Public API:
 from __future__ import annotations
 
 from enum import Enum, auto
-from typing import Optional
 
 from costmap_utils import Costmap, select_detour_bias
 
@@ -205,7 +204,11 @@ def build_detour_command(
     """
     angular = select_detour_bias(cm, max_angular)
     if angular == 0.0:
-        return (0.0, 0.0)
+        # classify_state() routes fully blocked costmaps to HOLD/SEARCH before
+        # this builder is called. A zero bias here therefore means the free
+        # space is tied; pick a deterministic turn so DETOUR does not degrade
+        # into an accidental hold.
+        angular = min(0.5, max_angular)
     linear = max(detour_forward_min_vel, pursuit_linear)
     if linear < 0.0:
         linear = 0.0

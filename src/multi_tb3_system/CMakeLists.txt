@@ -38,23 +38,31 @@ install(PROGRAMS
 # All .launch.py files in launch/ are installed to the package share.
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
 )
 
 # ─── Config files ─────────────────────────────────────────────────────────────
 install(DIRECTORY config/
   DESTINATION share/${PROJECT_NAME}/config
+  PATTERN "*Zone.Identifier*" EXCLUDE
+  PATTERN "*:Zone.Identifier" EXCLUDE
 )
 
 # ─── World files ──────────────────────────────────────────────────────────────
 # Includes empty.world, pillars.world, columns.world (legacy).
 install(DIRECTORY worlds/
   DESTINATION share/${PROJECT_NAME}/worlds
+  PATTERN "*Zone.Identifier*" EXCLUDE
+  PATTERN "*:Zone.Identifier" EXCLUDE
 )
 
 # ─── Model files ──────────────────────────────────────────────────────────────
 # Local turtlebot3_burger model with topic patching support.
 install(DIRECTORY models/
   DESTINATION share/${PROJECT_NAME}/models
+  PATTERN "*Zone.Identifier*" EXCLUDE
+  PATTERN "*:Zone.Identifier" EXCLUDE
 )
 
 # ─── RViz config ──────────────────────────────────────────────────────────────

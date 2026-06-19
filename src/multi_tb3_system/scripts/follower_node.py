@@ -91,14 +91,12 @@ from costmap_utils import (
 )
 from convoy_tracking import (
     compute_goal_point,
-    goal_reached,
     is_newer_breadcrumb,
     should_hold,
 )
 from follower_state import (
     FollowerState,
     classify_state,
-    should_escalate_to_search,
     build_detour_command,
     build_search_command,
 )
@@ -309,12 +307,26 @@ class FollowerNode(Node):
                 [], 0.0, 0.0, 0.0, 0.0,
                 self.costmap_size, self.costmap_resolution,
             )
+            scan_for_safety = None
         else:
             s = self._scan
             cm = build_costmap(
                 s.ranges, s.angle_min, s.angle_increment,
                 s.range_min, s.range_max,
                 self.costmap_size, self.costmap_resolution,
+            )
+            scan_for_safety = s
+
+        safety_emergency_now = False
+        if scan_for_safety is not None:
+            safety_emergency_now = self.safety.is_emergency(
+                ranges=list(scan_for_safety.ranges),
+                angle_min=scan_for_safety.angle_min,
+                angle_increment=scan_for_safety.angle_increment,
+                range_min=(
+                    scan_for_safety.range_min
+                    if scan_for_safety.range_min > 0 else 0.12
+                ),
             )
 
         # ── Goal point: arc-length `gap` back from the newest path point ──
@@ -405,6 +417,14 @@ class FollowerNode(Node):
             (now - self._stationary_since).nanoseconds / 1e9
             if self._stationary_since is not None else 0.0
         )
+
+        if safety_emergency_now:
+            if not self._prev_emergency or self._emergency_since is None:
+                self._emergency_since = now
+        else:
+            self._emergency_since = None
+        self._prev_emergency = safety_emergency_now
+
         emergency_duration = (
             (now - self._emergency_since).nanoseconds / 1e9
             if self._emergency_since is not None else 0.0
@@ -414,7 +434,7 @@ class FollowerNode(Node):
         state = classify_state(
             goal_blocked=blocked,
             both_sides_blocked=both_blocked,
-            safety_emergency=self._prev_emergency,
+            safety_emergency=safety_emergency_now,
             hold_active=hold,
             stationary_duration_s=stationary_duration,
             emergency_duration_s=emergency_duration,
@@ -440,12 +460,9 @@ class FollowerNode(Node):
             base_linear, base_angular = pursuit_linear, pursuit_angular
 
         # ── SafetyController hard override (applied LAST) ─────────────
-        # Capture the pre-safety linear so we can detect whether the
-        # safety layer forced an emergency stop this cycle.
-        pre_safety_linear = base_linear
         linear_x, angular_z = base_linear, base_angular
-        if self._scan is not None:
-            s = self._scan
+        if scan_for_safety is not None:
+            s = scan_for_safety
             linear_x, angular_z = self.safety.check_and_modify(
                 linear_x=linear_x,
                 angular_z=angular_z,
@@ -454,24 +471,6 @@ class FollowerNode(Node):
                 angle_increment=s.angle_increment,
                 range_min=s.range_min if s.range_min > 0 else 0.12,
             )
-
-        # ── Update emergency-duration tracking (R3.2, R3.5) ───────────
-        # Heuristic: the safety layer just clamped a positive forward
-        # command to zero, so a forward obstacle is inside safe_distance.
-        # Only count this in TRACKING / DETOUR (states that asked to
-        # move forward); HOLD / EMERGENCY_STOP / SEARCH are not counted
-        # here so an intentional hold doesn't masquerade as an emergency.
-        safety_emergency_now = (
-            state in (FollowerState.TRACKING, FollowerState.DETOUR)
-            and pre_safety_linear > 0.0
-            and linear_x == 0.0
-        )
-        if safety_emergency_now:
-            if not self._prev_emergency or self._emergency_since is None:
-                self._emergency_since = now
-        else:
-            self._emergency_since = None
-        self._prev_emergency = safety_emergency_now
 
         # Slew/clamp the base command and record it as the new
         # ``self._last_lin`` / ``self._last_ang``.
