@@ -12,6 +12,13 @@ Panels:
         - /LaserScan - tb11
         - /LaserScan - tb21
         - /LaserScan - tb31
+        - /tb1 Local Costmap1
+        - /tb2 Local Costmap1
+        - /tb3 Local Costmap1
+        - /Global Map (SLAM)1
+        - /tb1 Global Costmap1
+        - /tb2 Global Costmap1
+        - /tb3 Global Costmap1
       Splitter Ratio: 0.5
     Tree Height: 755
   - Class: rviz_common/Selection
@@ -370,7 +377,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: ""
+        Value: /tb1/local_costmap_updates
       Use Timestamp: false
       Value: true
 
@@ -393,7 +400,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: ""
+        Value: /tb2/local_costmap_updates
       Use Timestamp: false
       Value: true
 
@@ -416,7 +423,99 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: ""
+        Value: /tb3/local_costmap_updates
+      Use Timestamp: false
+      Value: true
+
+    # ── Global Map (SLAM) ────────────────────────────────────────────────────
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: true
+      Enabled: true
+      Name: "Global Map (SLAM)"
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_updates
+      Use Timestamp: false
+      Value: true
+
+    # ── tb1 Global Costmap ───────────────────────────────────────────────────
+    - Alpha: 0.6
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: "tb1 Global Costmap"
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb1/global_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb1/global_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+
+    # ── tb2 Global Costmap ───────────────────────────────────────────────────
+    - Alpha: 0.6
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: "tb2 Global Costmap"
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb2/global_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb2/global_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+
+    # ── tb3 Global Costmap ───────────────────────────────────────────────────
+    - Alpha: 0.6
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: "tb3 Global Costmap"
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb3/global_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tb3/global_costmap/costmap_updates
       Use Timestamp: false
       Value: true
 

@@ -94,7 +94,7 @@ ros2_ws/src/multi_tb3_system/
 │       └── model.config
 │
 ├── rviz/
-│   └── multi_robot.rviz               # Pre-configured: RobotModel + LaserScan + TF × 3
+│   └── multi_robot.rviz               # Pre-configured: RobotModel + LaserScan + TF + Costmaps × 3, plus Global Map
 │
 ├── .gitattributes                     # Forces LF endings on *.py, *.yaml, *.world, *.sdf
 ├── CMakeLists.txt
@@ -799,3 +799,11 @@ Positive `gx` = goal is ahead → drive forward. Negative `gx` = overshoot → s
 **Issue:** `Ctrl+C` shutdown produced `rclpy.exceptions.RCLError: context is not valid` when the zero-velocity publish in the `finally` block ran after the ROS context was torn down.
 
 **Fix:** The shutdown publish is wrapped in `if rclpy.ok(): try/except Exception` in `follower_node.py`.
+
+---
+
+### 14.8 RViz Costmap "Invalid Topic Name" Error
+
+**Issue:** In `multi_robot.rviz`, the `rviz_default_plugins/Map` plugin for cost maps produced an error: `Error subscribing: Invalid topic Name: name must not be a empty string...`. This occurs when the `Update Topic` value is missing or set to an empty string (`""`), causing RViz to fail parsing the topic path.
+
+**Fix:** Explicitly populated the `Update Topic` property with a valid string appending the `_updates` suffix for all local and global cost maps (e.g., `/tb1/local_costmap_updates`). Also expanded the `multi_robot.rviz` configuration to include Local Costmaps, Global Costmaps, and the global SLAM `/map`.

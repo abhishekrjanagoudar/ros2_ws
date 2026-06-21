@@ -85,9 +85,14 @@ Hold a key to move, release to stop. Followers start automatically.
 multi_tb3_system/
 ├── scripts/
 │   ├── convoy_publisher.py    # Publishes leader path (10 Hz)
+│   ├── convoy_tracking.py     # Pure helpers for path tracking
+│   ├── costmap_generator.py   # Costmap visualization node
+│   ├── costmap_utils.py       # Pure helpers for local occupancy grid
 │   ├── follower_node.py       # Pure Pursuit follower (50 Hz)
-│   ├── safety_controller.py   # Emergency stop
-│   └── teleop_controller.py   # Keyboard teleop
+│   ├── follower_state.py      # Follower state machine logic
+│   ├── laser_processor.py     # Scan → Cartesian clustering library
+│   ├── safety_controller.py   # Emergency stop + steering bias
+│   └── teleop_controller.py   # Burst-mode keyboard teleop
 ├── launch/
 │   ├── robot.launch.py        # ⭐ Entry point
 │   ├── followers.launch.py

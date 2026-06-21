@@ -101,6 +101,7 @@ class SafetyController:
             if not math.isfinite(r) or r < range_min:
                 continue
             angle = angle_min + i * angle_increment
+            angle = math.atan2(math.sin(angle), math.cos(angle))
 
             # ─── Steering zone (wider front cone) ────
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
@@ -145,6 +146,7 @@ class SafetyController:
             if not math.isfinite(r) or r < range_min:
                 continue
             angle = angle_min + i * angle_increment
+            angle = math.atan2(math.sin(angle), math.cos(angle))
             if abs(angle) <= emergency_half and r < self.safe_distance:
                 return True
         return False
