@@ -69,7 +69,7 @@ def _resolve_ui_flags(context, *args, **kwargs):
     actions = [
         _include('worlds.launch.py',       {'world': world, 'gz': effective_gz}),
         _include('spawn_robots.launch.py', {'nBurger': nBurger}),
-        _include('followers.launch.py',    {'nBurger': nBurger}),
+        _include('followers.launch.py',    {'nBurger': nBurger, 'rviz': effective_rviz}),
     ]
     if effective_rviz == 'true':
         actions.append(_include('rviz.launch.py'))

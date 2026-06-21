@@ -10,9 +10,7 @@ break the spawn→follower startup ordering. Centralizing them here keeps the
 two launch files in lock-step by construction.
 
 It also provides:
-  * ``read_burger_urdf()``      — shared TurtleBot3 Burger URDF loader.
-  * ``make_legacy_world_launch()`` — factory for the thin world_* convenience
-    launchers that delegate to the legacy ``multi_robot.launch.py``.
+  * ``read_burger_urdf()`` — shared TurtleBot3 Burger URDF loader.
 
 It is imported by launch files at launch time, exactly like
 ``generate_sdf.py`` already is.
@@ -26,9 +24,18 @@ from ament_index_python.packages import get_package_share_directory
 # ─── Convoy formation geometry ─────────────────────────────────────────────────
 # Robots are spawned in a line behind the leader:
 #   tb1 at x= 0.0, tb2 at x=-0.5, tb3 at x=-1.0.
-SPAWN_X_STEP = -0.5   # metres between successive robots along x (= convoy_spacing = 0.5 m)
+#
+# ⚠️  KEEP IN SYNC — all three of these must equal the same absolute value:
+#       1. SPAWN_X_STEP          (here, absolute value = 0.5 m)
+#       2. convoy_spacing        in config/follower_params.yaml  (= 0.5 m)
+#       3. convoy_spacing default in scripts/follower_node.py    (= 0.5 m)
+#
+# If they diverge, followers will spawn at the wrong initial gap relative to
+# their Pure Pursuit target, causing an aggressive correction burst on startup.
+SPAWN_X_STEP = -0.5   # metres between successive robots along x
 SPAWN_Y      =  0.0   # all robots share the same y
 SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
+
 
 
 # ─── Staggered startup timing (seconds) ────────────────────────────────────────
@@ -91,37 +98,3 @@ def read_burger_urdf() -> str:
     with open(urdf_path, 'r') as f:
         return f.read().replace('${namespace}', '')
 
-
-def make_legacy_world_launch(world: str):
-    """
-    Build a LaunchDescription that delegates to the legacy
-    ``multi_robot.launch.py`` for a fixed *world*.
-
-    Factored out of the otherwise-identical ``world_empty.launch.py`` and
-    ``world_obstacles.launch.py`` convenience launchers.
-    """
-    # Imported lazily so plain-config consumers of this module don't pull in
-    # the full launch machinery.
-    from launch import LaunchDescription
-    from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-    from launch.launch_description_sources import PythonLaunchDescriptionSource
-    from launch.substitutions import LaunchConfiguration
-
-    pkg_share = get_package_share_directory('multi_tb3_system')
-
-    return LaunchDescription([
-        DeclareLaunchArgument('use_rviz', default_value='false',
-                              description="Show RViz2 ('true'/'false')."),
-        DeclareLaunchArgument('use_gui',  default_value='true',
-                              description="Show Gazebo GUI ('true'/'false')."),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, 'launch', 'multi_robot.launch.py')
-            ),
-            launch_arguments={
-                'world':    world,
-                'use_rviz': LaunchConfiguration('use_rviz'),
-                'use_gui':  LaunchConfiguration('use_gui'),
-            }.items(),
-        ),
-    ])

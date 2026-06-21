@@ -6,6 +6,8 @@ Starts:
   * convoy_publisher on the leader (tb1): publishes /tb1/convoy_path.
   * one costmap_generator.py per robot (tb1, tb2, tb3, ...): consumes the
     robot's /scan and publishes a per-robot ``local_costmap`` for visualization.
+    Publishing is disabled by default (enable_costmap_viz=false) and enabled
+    automatically when rviz:=true so headless runs waste no CPU.
   * one Pure-Pursuit follower_node.py per follower robot (tb2, tb3, ...).
 
 Each follower subscribes to the shared leader path and tracks it while holding
@@ -17,9 +19,10 @@ from ``multi_tb3_system.launch_common`` so this stays in lock-step with
 spawn_robots.launch.py.
 
 Args:
-  nBurger       : follower count 1–2 (default 2)
+  nBurger       : follower count 1-2 (default 2)
   use_sim_time  : 'true' (default) | 'false'
   convoy_spacing: gap per convoy slot in metres (default 0.5)
+  rviz          : 'true' | 'false' (default) — enables costmap_viz publishing
 """
 
 import os
@@ -45,6 +48,9 @@ def _launch_setup(context, *args, **kwargs):
     n_burgers      = clamp_followers(int(LaunchConfiguration('nBurger').perform(context)))
     use_sim_time   = LaunchConfiguration('use_sim_time').perform(context) == 'true'
     convoy_spacing = float(LaunchConfiguration('convoy_spacing').perform(context))
+    # enable_costmap_viz mirrors the rviz flag: no point publishing OccupancyGrid
+    # when no RViz is running — saves 3×10×3600 int8 serializations/sec/robot.
+    enable_viz     = LaunchConfiguration('rviz').perform(context) == 'true'
 
     pkg_share   = get_package_share_directory('multi_tb3_system')
     params_file = os.path.join(pkg_share, 'config', 'follower_params.yaml')
@@ -81,8 +87,11 @@ def _launch_setup(context, *args, **kwargs):
             name='costmap_generator',
             namespace=ns,
             parameters=[
-                params_file,   # picks up costmap_size/resolution/publish_rate/stale_timeout from follower_params.yaml
-                {'use_sim_time': use_sim_time},
+                params_file,
+                {
+                    'use_sim_time':       use_sim_time,
+                    'enable_costmap_viz': enable_viz,
+                },
             ],
             output='screen',
             emulate_tty=True,
@@ -118,10 +127,12 @@ def _launch_setup(context, *args, **kwargs):
 def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument('nBurger',        default_value='2',
-                              description='Follower count (1–2).'),
+                              description='Follower count (1-2).'),
         DeclareLaunchArgument('use_sim_time',   default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
         DeclareLaunchArgument('convoy_spacing', default_value='0.5',
                               description='Gap per convoy slot in metres (must match SPAWN_X_STEP=0.5m).'),
+        DeclareLaunchArgument('rviz',           default_value='false',
+                              description="'true' = enable costmap_viz publishing for RViz."),
         OpaqueFunction(function=_launch_setup),
     ])

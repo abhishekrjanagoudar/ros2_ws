@@ -16,11 +16,14 @@ find_package(rclpy REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
 
 # ─── Python executables (scripts/) ────────────────────────────────────────────
-# Note: costmap_utils.py, convoy_tracking.py, and follower_state.py are pure
-# Python modules (no shebang) imported at runtime by the executable scripts via
-# sys.path.insert of the script directory. Installing them via install(PROGRAMS)
-# places them in lib/${PROJECT_NAME} alongside the executables so the imports
-# resolve.
+# Note: costmap_utils.py, convoy_tracking.py, follower_state.py, and
+# motion_controller.py are pure Python modules (no shebang) imported at
+# runtime by the executable scripts via sys.path.insert of the script
+# directory. Installing them via install(PROGRAMS) places them in
+# lib/${PROJECT_NAME} alongside the executables so the imports resolve.
+#
+# laser_processor.py lives in multi_tb3_system/perception/ (future use) and is
+# installed as part of the ament_python_install_package() call above — not here.
 install(PROGRAMS
   scripts/convoy_publisher.py
   scripts/convoy_tracking.py
@@ -28,7 +31,7 @@ install(PROGRAMS
   scripts/costmap_utils.py
   scripts/follower_node.py
   scripts/follower_state.py
-  scripts/laser_processor.py
+  scripts/motion_controller.py
   scripts/safety_controller.py
   scripts/teleop_controller.py
   DESTINATION lib/${PROJECT_NAME}

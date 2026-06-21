@@ -10,8 +10,12 @@ follower_node:
     leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
     # ── Convoy spacing ───────────────────────────────────────────────────
-    convoy_spacing:       0.5     # gap per convoy slot [m] (tb2=1x, tb3=2x)
-    goal_tolerance:       0.4    # stop when within this distance of goal [m]
+    # ⚠️  KEEP IN SYNC with:
+    #     - SPAWN_X_STEP (abs value) in multi_tb3_system/launch_common.py
+    #     - convoy_spacing default   in scripts/follower_node.py
+    # All three must equal 0.5 m or followers will burst-correct at startup.
+    convoy_spacing:       0.5     # gap per convoy slot [m] (tb2=1x=0.5m, tb3=2x=1.0m)
+    goal_tolerance:       0.4     # stop when within this distance of goal [m]
 
     # ── Pure Pursuit ─────────────────────────────────────────────────────
     lookahead_distance:   0.5     # lookahead point distance along the path [m]
@@ -21,10 +25,17 @@ follower_node:
     # ── Limits ───────────────────────────────────────────────────────────
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
-    safe_distance:        0.35    # LiDAR hard-stop distance (SafetyController) — strictly < convoy_spacing=0.5m so preceding member at the nominal gap does not trigger emergency stop
+    # ⚠️  safe_distance must be strictly < convoy_spacing (0.5 m).
+    # At the nominal gap the robot directly ahead would fall in the
+    # emergency-stop cone if this value equals or exceeds convoy_spacing.
+    safe_distance:        0.35    # LiDAR hard-stop distance (SafetyController) [m]
+
 
     # ── Control loop / smoothing ─────────────────────────────────────────
-    control_frequency:    50.0    # Hz — cmd_vel publish / control rate
+    # 20 Hz: LiDAR publishes at ~5 Hz so the safety layer is stale for
+    # 10+ control cycles at 50 Hz with no benefit. 20 Hz gives 4×
+    # oversampling of the sensor rate while halving CPU load.
+    control_frequency:    20.0    # Hz — cmd_vel publish / control rate
     max_linear_accel:     1.0     # m/s^2 — command slew limit
     max_angular_accel:    3.0     # rad/s^2 — command slew limit
 

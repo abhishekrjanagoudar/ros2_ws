@@ -64,6 +64,10 @@ class CostmapGenerator(Node):
         self.declare_parameter('costmap_stale_timeout', 1.0)
         self.declare_parameter('costmap_frame', '')
         self.declare_parameter('range_min_override', 0.0)
+        # enable_costmap_viz: set false (default) in headless runs to avoid
+        # serializing 3×10×3600 int8 values/sec with no RViz consumer.
+        # Set true by followers.launch.py when rviz=true or ros_ui=true.
+        self.declare_parameter('enable_costmap_viz', False)
         # Backward-compatible aliases for direct/manual launches.
         self.declare_parameter('size_m', 0.0)
         self.declare_parameter('resolution', 0.0)
@@ -77,6 +81,7 @@ class CostmapGenerator(Node):
         self.stale_timeout      = float(gp('stale_timeout') or gp('costmap_stale_timeout'))
         self.costmap_frame      = str(gp('costmap_frame'))
         self.range_min_override = float(gp('range_min_override'))
+        self.enabled            = bool(gp('enable_costmap_viz'))
 
         # ── QoS profiles ────────────────────────────────────────────────────
         # Match the BEST_EFFORT/VOLATILE sensor QoS used in follower_node.py
@@ -126,8 +131,15 @@ class CostmapGenerator(Node):
             f"publish_rate={self.publish_rate:.1f}Hz | "
             f"stale_timeout={self.stale_timeout:.2f}s | "
             f"costmap_frame='{self.costmap_frame}' | "
-            f"range_min_override={self.range_min_override:.3f}"
+            f"range_min_override={self.range_min_override:.3f} | "
+            f"enable_costmap_viz={self.enabled}"
         )
+        if not self.enabled:
+            self.get_logger().info(
+                "CostmapGenerator: enable_costmap_viz=false — "
+                "publish timer is active but will not publish. "
+                "Set enable_costmap_viz:=true (or ros_ui:=true) to enable."
+            )
 
     # ── Callbacks ───────────────────────────────────────────────────────────
     def _scan_cb(self, msg: LaserScan) -> None:
@@ -138,6 +150,9 @@ class CostmapGenerator(Node):
     def _publish(self) -> None:
         """Publish-timer body.
 
+        No-ops when ``enable_costmap_viz`` is false (headless mode) to avoid
+        serializing 3×10×3600 int8 values/sec with no RViz consumer.
+
         Builds the Local_Costmap from the cached ``LaserScan`` (or an
         all-free grid when no scan has been received yet — R1.6 — or
         when the cached scan is older than ``stale_timeout`` — R1.7) by
@@ -145,6 +160,9 @@ class CostmapGenerator(Node):
         ``OccupancyGrid`` with matching geometry and publishes it on
         ``local_costmap`` (R1.1, R1.2, R1.3, R2.1).
         """
+        if not self.enabled:
+            return
+
         # ── Decide what to feed into build_costmap ─────────────────────────
         if self._scan is None:
             # R1.6: no scan ever received → publish an all-free grid by

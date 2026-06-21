@@ -1,0 +1,20 @@
+# ── Windows metadata (created when files are downloaded on Windows) ────────────
+*Zone.Identifier
+*:Zone.Identifier
+
+# ── Python build artefacts ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── ROS 2 / colcon build output ───────────────────────────────────────────────
+build/
+install/
+log/
+
+# ── Editor / OS ───────────────────────────────────────────────────────────────
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
