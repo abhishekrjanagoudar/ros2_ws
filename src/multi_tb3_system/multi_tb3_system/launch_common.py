@@ -23,16 +23,16 @@ from ament_index_python.packages import get_package_share_directory
 
 # ─── Convoy formation geometry ─────────────────────────────────────────────────
 # Robots are spawned in a line behind the leader:
-#   tb1 at x= 0.0, tb2 at x=-0.5, tb3 at x=-1.0.
+#   tb1 at x=0.0, tb2 at x=-0.6, tb3 at x=-1.2.
 #
 # ⚠️  KEEP IN SYNC — all three of these must equal the same absolute value:
-#       1. SPAWN_X_STEP          (here, absolute value = 0.5 m)
-#       2. convoy_spacing        in config/follower_params.yaml  (= 0.5 m)
-#       3. convoy_spacing default in scripts/follower_node.py    (= 0.5 m)
+#       1. SPAWN_X_STEP          (here, absolute value = 0.6 m)
+#       2. convoy_spacing        in config/follower_params.yaml  (= 0.6 m)
+#       3. convoy_spacing default in scripts/follower_node.py    (= 0.6 m)
 #
 # If they diverge, followers will spawn at the wrong initial gap relative to
 # their Pure Pursuit target, causing an aggressive correction burst on startup.
-SPAWN_X_STEP = -0.5   # metres between successive robots along x
+SPAWN_X_STEP = -0.6   # metres between successive robots along x
 SPAWN_Y      =  0.0   # all robots share the same y
 SPAWN_Z      =  0.01  # spawn slightly above ground to avoid clipping
 
@@ -74,12 +74,22 @@ def spawn_x(index: int) -> float:
 
 
 def spawn_delay(index: int) -> float:
-    """Spawn delay (s) for robot *index* (1-based: tb1=0.0, tb2=4.0, tb3=8.0)."""
-    return (index - 1) * SPAWN_DELAY_STEP
+    """Spawn delay (s) for robot *index* (1-based: tb1=0.0, tb2=2.0, tb3=4.0)."""
+    if index == 1:
+        return 0.0
+    elif index == 2:
+        return 2.0
+    elif index == 3:
+        return 4.0
+    return (index - 1) * 2.0
 
 
 def follower_start_delay(index: int) -> float:
     """Drive-start delay (s) for the follower on robot *index* (1-based)."""
+    if index == 2:
+        return 5.0
+    elif index == 3:
+        return 7.0
     return spawn_delay(index) + FOLLOWER_INIT_BUFFER
 
 

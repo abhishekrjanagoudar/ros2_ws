@@ -12,9 +12,11 @@ build/
 install/
 log/
 
+
 # ── Editor / OS ───────────────────────────────────────────────────────────────
 .vscode/
 *.swp
 *.swo
 .DS_Store
 Thumbs.db
+ROS2/

@@ -178,9 +178,10 @@ class PursuitController:
             )
             scan_for_safety = None
         else:
+            rmin = scan.range_min if scan.range_min > 0 else 0.12
             cm = build_costmap(
                 scan.ranges, scan.angle_min, scan.angle_increment,
-                scan.range_min, scan.range_max,
+                rmin, scan.range_max,
                 self.costmap_size, self.costmap_resolution,
             )
             scan_for_safety = scan
@@ -196,6 +197,17 @@ class PursuitController:
             if acc >= self._gap:
                 goal_idx = i - 1
                 break
+
+        # ── Path-length guard (P4) ───────────────────────────────────────────
+        # If the path is shorter than the required gap, the robot is not yet in
+        # a valid convoy position. Hold in place rather than sprinting to path[0].
+        path_too_short = (
+            goal_idx == 0 and len(path) > 1
+            and math.hypot(path[-1][0] - path[0][0],
+                           path[-1][1] - path[0][1]) < self._gap * 0.5
+        )
+        if path_too_short:
+            return 0.0, 0.0, False
 
         # ── Pure Pursuit ──────────────────────────────────────────────────────
         # 1. Closest path point (O(1) walk starting near last closest).
@@ -217,8 +229,8 @@ class PursuitController:
         for i in range(closest_idx, goal_idx):
             acc += math.hypot(path[i + 1][0] - path[i][0],
                               path[i + 1][1] - path[i][1])
-            look = path[i + 1]
             if acc >= self.lookahead_distance:
+                look = path[i + 1]
                 break
 
         lx, ly = to_robot_frame(look[0], look[1], rx, ry, ryaw)
@@ -235,14 +247,20 @@ class PursuitController:
             pursuit_angular = 0.0
         else:
             forward_drive   = max(0.0, gx_local)
-            creep           = self.kp_linear * dist_to_goal * 0.3
-            pursuit_linear  = self.kp_linear * max(forward_drive, creep)
-            curvature       = 2.0 * ly / (Ld * Ld)
-            pursuit_angular = pursuit_linear * curvature
-            if abs(alpha) > 0.8:
-                pursuit_angular = self.kp_angular * alpha
-                pursuit_linear *= 0.3
-            pursuit_linear *= max(0.3, math.cos(alpha))
+            if forward_drive <= 0.0:
+                # Goal is behind the robot — stop forward motion, allow only
+                # angular correction to turn back toward the goal.
+                pursuit_linear  = 0.0
+                pursuit_angular = self.kp_angular * math.atan2(gy_local, -gx_local + 1e-6)
+            else:
+                creep           = self.kp_linear * dist_to_goal * 0.3
+                pursuit_linear  = self.kp_linear * max(forward_drive, creep)
+                curvature       = 2.0 * ly / (Ld * Ld)
+                pursuit_angular = pursuit_linear * curvature
+                if abs(alpha) > 0.8:
+                    pursuit_angular = self.kp_angular * alpha
+                    pursuit_linear *= 0.3
+                pursuit_linear *= max(0.3, math.cos(alpha))
 
         # ── State-machine inputs ──────────────────────────────────────────────
         blocked              = is_goal_blocked(cm, gx_local, gy_local)

@@ -140,41 +140,38 @@ def is_newer_breadcrumb(
     new_count: int,
     new_stamp_ns: int,
 ) -> bool:
-    """Return ``True`` when the latest Breadcrumb_Path is newer than the prior.
+    """Return ``True`` when the latest Breadcrumb_Path contains a new breadcrumb.
 
-    A newer Breadcrumb_Path is detected either by an increase in the
-    Breadcrumb count (a new pose was appended) or by a change in the
-    newest-Breadcrumb timestamp (the publisher refreshed the message).
-    Either condition is sufficient, matching R7.1's "count increases or
-    timestamp of the newest Breadcrumb changes" criterion.
+    A newer Breadcrumb_Path is detected solely by a strict increase in the
+    breadcrumb count. This means the leader has physically moved and the
+    publisher appended a new pose to the path.
 
-    The timestamp comparison uses ``!=`` rather than ``>`` so that any
-    change is treated as a new arrival; this keeps the predicate robust
-    to clock resets and to publishers that re-emit the same path with a
-    refreshed header.
+    The header timestamp is deliberately **not** compared here. The
+    ``convoy_publisher`` refreshes ``header.stamp`` at 50 Hz even when the
+    leader is stationary, so a timestamp comparison would return ``True``
+    every 20 ms and prevent the HOLD state from ever activating (the
+    freshness timer would be reset continuously).
 
     Parameters
     ----------
     prev_count:
         Breadcrumb count from the most recently observed Breadcrumb_Path.
     prev_stamp_ns:
-        Newest-Breadcrumb timestamp, in integer nanoseconds, from the
-        most recently observed Breadcrumb_Path.
+        Unused. Retained in the signature for call-site compatibility.
     new_count:
         Breadcrumb count of the just-received Breadcrumb_Path.
     new_stamp_ns:
-        Newest-Breadcrumb timestamp, in integer nanoseconds, of the
-        just-received Breadcrumb_Path.
+        Unused. Retained in the signature for call-site compatibility.
 
     Returns
     -------
     bool
-        ``True`` if the count strictly increased OR the newest-Breadcrumb
-        timestamp differs from the previous one, else ``False``.
+        ``True`` if ``new_count > prev_count``, else ``False``.
 
     Validates: Requirements 7.1
     """
-    return new_count > prev_count or new_stamp_ns != prev_stamp_ns
+    return new_count > prev_count
+
 
 
 def should_hold(

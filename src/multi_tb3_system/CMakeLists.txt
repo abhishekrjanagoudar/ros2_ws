@@ -80,12 +80,17 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
   )
 endif()
 
-# ─── Linting ──────────────────────────────────────────────────────────────────
+# ─── Linting & Testing ──────────────────────────────────────────────────────────
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+  
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_convoy_tracking test/test_convoy_tracking.py)
+  ament_add_pytest_test(test_motion_controller test/test_motion_controller.py)
+  ament_add_pytest_test(test_laser_processor test/test_laser_processor.py)
 endif()
 
 ament_package()

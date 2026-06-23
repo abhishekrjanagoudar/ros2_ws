@@ -89,7 +89,7 @@ class FollowerNode(Node):
 
         # ── Parameters ──────────────────────────────────────────────────────
         self.declare_parameter('leader_ns', 'tb1')
-        self.declare_parameter('convoy_spacing', 0.5)  # must match SPAWN_X_STEP in launch_common.py and follower_params.yaml
+        self.declare_parameter('convoy_spacing', 0.6)  # must match SPAWN_X_STEP in launch_common.py and follower_params.yaml
         self.declare_parameter('lookahead_distance', 0.5)
         self.declare_parameter('kp_linear', 0.8)
         self.declare_parameter('kp_angular', 1.5)
@@ -99,7 +99,7 @@ class FollowerNode(Node):
         self.declare_parameter('control_frequency', 20.0)  # Hz — must match follower_params.yaml
         self.declare_parameter('max_linear_accel', 1.0)
         self.declare_parameter('max_angular_accel', 3.0)
-        self.declare_parameter('goal_tolerance', 0.4)   # Euclidean stop threshold [m]; must match follower_params.yaml
+        self.declare_parameter('goal_tolerance', 0.05)   # Euclidean stop threshold [m]; must match follower_params.yaml
         self.declare_parameter('spawn_offset_x', 0.0)
         self.declare_parameter('spawn_offset_y', 0.0)
 
@@ -175,6 +175,10 @@ class FollowerNode(Node):
         self._prev_count: int            = 0
         self._prev_newest_stamp_ns: int  = 0
 
+        # Tracks whether the control loop has successfully run at least once.
+        # Used to gate pre-mission timer resets (see _control_loop).
+        self._has_ever_tracked: bool = False
+
         # Output smoothing state
         self._last_lin: float = 0.0
         self._last_ang: float = 0.0
@@ -188,7 +192,7 @@ class FollowerNode(Node):
         self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.create_subscription(Odometry,   'odom',
                                  self._odom_cb, qos)
-        self.create_subscription(Path,       f'/{self.leader_ns}/convoy_path',
+        self.create_subscription(Path,       'convoy_path',
                                  self._path_cb, 10)
         self.create_subscription(LaserScan,  'scan',
                                  self._scan_cb, qos)
@@ -219,12 +223,18 @@ class FollowerNode(Node):
         )
 
     def _path_cb(self, msg: Path) -> None:
+        # Guard: ignore empty Path messages published during startup before the
+        # leader's first odom arrives. Processing them would set _path=[] and
+        # corrupt _last_newest_time_ns / breadcrumb freshness state (Prompt 3).
+        if not msg.poses:
+            return
+
         self._path = [(ps.pose.position.x, ps.pose.position.y)
                       for ps in msg.poses]
 
         # Breadcrumb-freshness bookkeeping (R7.1, R7.6).
         new_count = len(msg.poses)
-        h = msg.poses[-1].header if msg.poses else msg.header
+        h = msg.poses[-1].header
         new_stamp_ns = int(h.stamp.sec) * 1_000_000_000 + int(h.stamp.nanosec)
 
         if is_newer_breadcrumb(self._prev_count, self._prev_newest_stamp_ns,
@@ -232,7 +242,7 @@ class FollowerNode(Node):
             now_ns = self.get_clock().now().nanoseconds
             self._controller.notify_newer_breadcrumb(now_ns)
 
-        self._prev_count          = new_count
+        self._prev_count           = new_count
         self._prev_newest_stamp_ns = new_stamp_ns
 
     def _scan_cb(self, msg: LaserScan) -> None:
@@ -243,15 +253,19 @@ class FollowerNode(Node):
 
     def _control_loop(self) -> None:
         if self._pose is None or len(self._path) < 2:
-            # Nothing to track yet — hold zero, reset deadlock timers so a
-            # transient pre-startup pause does not accumulate into a spurious
-            # SEARCH escalation once the path arrives.
-            self._controller._stationary_since = None
-            self._controller._emergency_since  = None
-            self._controller._prev_emergency   = False
+            # Nothing to track yet — publish zero.
+            # Only reset deadlock timers during pre-mission startup (before
+            # _has_ever_tracked is set). Once tracking has started, a transient
+            # path dropout mid-mission must NOT clear the timers — doing so
+            # would prevent SEARCH from escalating if the path disappears.
+            if not self._has_ever_tracked:
+                self._controller._stationary_since = None
+                self._controller._emergency_since  = None
+                self._controller._prev_emergency   = False
             self._publish_smoothed(0.0, 0.0)
             return
 
+        self._has_ever_tracked = True
         now_ns    = self.get_clock().now().nanoseconds
         scan      = self._scan
         scan_age  = (
