@@ -1,23 +1,6 @@
 #!/usr/bin/env python3
 """
-laser_processor.py
-==================
 Utility module for LiDAR data processing in the Multi-TurtleBot3 convoy system.
-
-Responsibilities:
-  - Convert LaserScan polar data to Cartesian points
-  - Apply front-sector filtering (± angle_limit degrees)
-  - Cluster points using Euclidean distance segmentation
-  - Extract cluster centroids
-  - Filter out wall-like (large) and noise (tiny) clusters
-
-NO temporal tracking is performed here. This module is purely geometric.
-
-Status
-------
-Not used by any running node — kept here for future work (e.g. a
-LiDAR-based leader-detection follower that does not depend on the
-breadcrumb path).  Import path: ``multi_tb3_system.perception.laser_processor``
 """
 
 from __future__ import annotations
@@ -27,7 +10,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
-# ─── Data structures ──────────────────────────────────────────────────────────
+# Data structures
 
 @dataclass
 class Cluster:
@@ -45,7 +28,7 @@ class Cluster:
                 f"size={self.size})")
 
 
-# ─── Core processing functions ─────────────────────────────────────────────────
+# Core processing functions
 
 def scan_to_cartesian(
     ranges: List[float],
@@ -55,14 +38,8 @@ def scan_to_cartesian(
     range_max: float = 3.5,
 ) -> List[Tuple[float, float]]:
     """
-    Convert a LaserScan range array to a list of valid (x, y) Cartesian points
-    in the robot's local coordinate frame.
-
-    Robot convention:
-      - x → forward
-      - y → left
-      - angle=0 → straight ahead
-    """
+Convert a LaserScan range array to a list of valid (x, y) Cartesian points
+"""
     points = []
     for i, r in enumerate(ranges):
         if not math.isfinite(r):
@@ -148,11 +125,8 @@ def select_target_cluster(
     lock_radius: float = 0.4,
 ) -> Optional[Cluster]:
     """
-    Select the best candidate cluster to follow.
-
-    Prefers the cluster closest to the previous target position (target lock);
-    falls back to the closest cluster to the robot.
-    """
+Select the best candidate cluster to follow.
+"""
     if not clusters:
         return None
     if last_target_pos is not None:
@@ -176,10 +150,8 @@ def process_scan(
     last_target_pos: Optional[Tuple[float, float]] = None,
 ) -> Tuple[Optional[Cluster], List[Cluster]]:
     """
-    Full pipeline: raw LaserScan → (target_cluster, all_clusters).
-
-    Steps: polar→Cartesian → front-sector filter → cluster → size-filter → select.
-    """
+Full pipeline: raw LaserScan → (target_cluster, all_clusters).
+"""
     points      = scan_to_cartesian(ranges, angle_min, angle_increment, range_min, range_max)
     front       = filter_front_sector(points, half_angle_deg=front_half_angle_deg)
     raw         = euclidean_cluster(front, cluster_distance=cluster_distance)

@@ -16,21 +16,18 @@ class TestConvoyTracking(unittest.TestCase):
         path = [(float(i), 0.0) for i in range(10)] # [ (0,0), (1,0), ..., (9,0) ]
         
         # Newest breadcrumb is (9,0). If gap is 2.5, goal point should be 2.5m behind newest
-        # so at x = 9.0 - 2.5 = 6.5
         lookahead = compute_goal_point(path, 2.5)
         self.assertIsNotNone(lookahead)
         self.assertAlmostEqual(lookahead[0], 6.5)
         self.assertAlmostEqual(lookahead[1], 0.0)
 
         # What if gap is further than the path's total length?
-        # path is 9.0 long. Gap is 15.0 -> should clamp to oldest (0.0, 0.0)
         lookahead = compute_goal_point(path, 15.0)
         self.assertAlmostEqual(lookahead[0], 0.0)
         self.assertAlmostEqual(lookahead[1], 0.0)
 
     def test_is_newer_breadcrumb(self):
         # Signature: is_newer_breadcrumb(prev_count, prev_stamp_ns, new_count, new_stamp_ns)
-        # Tests if the new path is "newer" logically.
         
         # New count larger
         self.assertTrue(is_newer_breadcrumb(10, 1000, 12, 1000))

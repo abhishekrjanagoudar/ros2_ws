@@ -1,26 +1,6 @@
 #!/usr/bin/env python3
 """
-motion_controller.py
-====================
 Pure-logic convoy motion controller — no ROS imports.
-
-Encapsulates everything that was previously embedded in
-``FollowerNode._control_loop()``:
-
-  * Geometry helpers  (_yaw_from_quaternion, _to_robot_frame, _slew)
-  * In-process costmap build (delegates to costmap_utils)
-  * Arc-length goal-point walk (delegates to convoy_tracking)
-  * Pure Pursuit lateral/longitudinal law
-  * State-machine classify + base-command selection (delegates to follower_state)
-  * SafetyController hard override (delegates to safety_controller)
-
-The node shell (follower_node.py) instantiates one PursuitController,
-caches ROS messages in callbacks, then calls::
-
-    lin, ang, emerg = controller.step(pose, path, scan, now_ns)
-
-on every control-timer tick.  All algorithm changes live here; the node
-shell never needs to be touched for tuning.
 """
 
 from __future__ import annotations
@@ -47,7 +27,7 @@ from follower_state import (
 from safety_controller import SafetyController
 
 
-# ─── Geometry helpers ─────────────────────────────────────────────────────────
+# Geometry helpers
 
 def yaw_from_quaternion(q) -> float:
     """Extract yaw angle from a ROS Quaternion message (or any object with
@@ -78,21 +58,12 @@ def slew(cur: float, tgt: float, max_delta: float) -> float:
     return tgt
 
 
-# ─── Controller ───────────────────────────────────────────────────────────────
+# Controller
 
 class PursuitController:
     """
-    Stateful Pure Pursuit + state-machine convoy follower.
-
-    Owns all algorithm state (timers, previous emergency flag, last closest
-    index).  The ROS node shell owns only the message caches and the publisher.
-
-    Usage::
-
-        ctrl = PursuitController(convoy_slot=2, params=...)
-        ...
-        lin, ang, is_emerg = ctrl.step(pose, path, scan, now_ns)
-    """
+Stateful Pure Pursuit + state-machine convoy follower.
+"""
 
     def __init__(
         self,
@@ -137,13 +108,13 @@ class PursuitController:
         self._state_for_timer_reset: FollowerState = FollowerState.TRACKING
         self._last_newest_time_ns: int          = 0      # ns since epoch
 
-    # ── Breadcrumb-freshness update (called from _path_cb) ────────────────────
+    # Breadcrumb-freshness update (called from _path_cb)
 
     def notify_newer_breadcrumb(self, now_ns: int) -> None:
         """Record the wall-clock time of the latest breadcrumb arrival."""
         self._last_newest_time_ns = now_ns
 
-    # ── Main entry point ──────────────────────────────────────────────────────
+    # Main entry point
 
     def step(
         self,
@@ -154,23 +125,11 @@ class PursuitController:
         now_ns: int,                        # current wall-clock time [ns]
     ) -> Tuple[float, float, bool]:
         """
-        Compute one control cycle.
-
-        Parameters
-        ----------
-        pose        : (rx, ry, ryaw) world-frame robot pose
-        path        : convoy breadcrumb list [(x,y), ...]
-        scan        : LaserScan message, or None if no scan yet
-        scan_age_s  : seconds since the cached scan was stamped
-        now_ns      : current time in nanoseconds (from rclpy clock)
-
-        Returns
-        -------
-        (linear_x, angular_z, is_emergency)
-        """
+Compute one control cycle.
+"""
         rx, ry, ryaw = pose
 
-        # ── Costmap ───────────────────────────────────────────────────────────
+        # Costmap
         scan_stale = scan is None or scan_age_s > self.costmap_stale_timeout
         if scan_stale:
             cm: Costmap = build_costmap(
@@ -190,8 +149,7 @@ class PursuitController:
             )
             scan_for_safety = scan
 
-        # ── Goal point: arc-length `gap` back from path end ───────────────────
-        # compute_goal_point interpolates and clamps when path < gap.
+        # Goal point: arc-length `gap` back from path end
         goal = compute_goal_point(path, self._gap)
         goal_idx = 0
         acc = 0.0
@@ -202,9 +160,7 @@ class PursuitController:
                 goal_idx = i - 1
                 break
 
-        # ── Path-length guard (P4) ───────────────────────────────────────────
-        # If the path is shorter than the required gap, the robot is not yet in
-        # a valid convoy position. Hold in place rather than sprinting to path[0].
+        # Path-length guard (P4)
         path_too_short = (
             goal_idx == 0 and len(path) > 1
             and math.hypot(path[-1][0] - path[0][0],
@@ -213,10 +169,7 @@ class PursuitController:
         if path_too_short:
             return 0.0, 0.0, False
 
-        # ── Pure Pursuit ──────────────────────────────────────────────────────
-        # 1. Closest path point (O(1) walk starting near last closest).
-        # Search from up to 20 poses BEFORE last known closest to recover
-        # from lateral drift without re-scanning the entire path.
+        # Pure Pursuit
         search_start = max(0, self._last_closest_idx - 20)
         start_idx    = min(search_start, goal_idx)
         closest_idx  = start_idx
@@ -228,8 +181,6 @@ class PursuitController:
                 closest_idx = i
             elif d > best + 0.10:
                 # Early-break only when distance is clearly growing.
-                # 0.10m threshold matches path_resolution*5 — tight enough
-                # to catch the genuine minimum without missing it on curves.
                 break
         self._last_closest_idx = closest_idx
 
@@ -259,7 +210,6 @@ class PursuitController:
             forward_drive   = max(0.0, gx_local)
             if forward_drive <= 0.0:
                 # Goal is behind the robot — stop forward motion, allow only
-                # angular correction to turn back toward the goal.
                 pursuit_linear  = 0.0
                 pursuit_angular = self.kp_angular * math.atan2(gy_local, -gx_local + 1e-6)
             else:
@@ -268,9 +218,6 @@ class PursuitController:
 
                 if abs(alpha) > 0.8:
                     # Large heading error: prioritize turning, slow forward motion.
-                    # Apply ONE speed reduction (not two). cos(alpha) alone at
-                    # alpha=0.8 gives 0.70x, at alpha=1.2 gives 0.36x — enough
-                    # to slow for sharp turns without making the follower crawl.
                     pursuit_angular = self.kp_angular * alpha
                     pursuit_linear *= max(0.35, math.cos(alpha))
                 else:
@@ -280,7 +227,7 @@ class PursuitController:
                     # Mild speed scaling for small heading errors.
                     pursuit_linear *= max(0.7, math.cos(alpha))
 
-        # ── State-machine inputs ──────────────────────────────────────────────
+        # State-machine inputs
         blocked              = is_goal_blocked(cm, gx_local, gy_local)
         left_free, right_free = free_counts_per_side(cm)
         both_blocked         = (left_free == 0 and right_free == 0)
@@ -299,19 +246,15 @@ class PursuitController:
             if self._stationary_since is not None else 0.0
         )
         # emergency_duration uses the previous cycle's timer so the state
-        # machine sees accumulated duration, not the instantaneous flag.
         emergency_duration = (
             (now_ns - self._emergency_since) / 1e9
             if self._emergency_since is not None else 0.0
         )
 
         # safety_emergency_now is resolved by check_and_modify_ex() below
-        # (single LiDAR pass). Use False as a well-defined placeholder for
-        # the state machine; classify_state() reads emergency_duration from
-        # the previous cycle, not the raw flag.
         safety_emergency_now = False
 
-        # ── Classify next state ───────────────────────────────────────────────
+        # Classify next state
         state = classify_state(
             goal_blocked=blocked,
             both_sides_blocked=both_blocked,
@@ -338,8 +281,6 @@ class PursuitController:
                 self.detour_forward_min_vel,
             )
             # Bias detour angular toward the goal when goal is more than 45°
-            # off-axis. Prevents DETOUR from turning away from the leader when
-            # costmap free space happens to be on the wrong side.
             goal_bearing = math.atan2(gy_local, gx_local)
             if abs(goal_bearing) > math.radians(45):
                 goal_sign   = 1.0 if goal_bearing > 0 else -1.0
@@ -349,9 +290,7 @@ class PursuitController:
         else:  # TRACKING
             base_linear, base_angular = pursuit_linear, pursuit_angular
 
-        # ── SafetyController hard override (single LiDAR pass) ───────────────
-        # check_and_modify_ex() returns corrected velocities AND the emergency
-        # flag in one scan walk, eliminating the previous double-pass pattern.
+        # SafetyController hard override (single LiDAR pass)
         linear_x, angular_z = base_linear, base_angular
         if scan_for_safety is not None:
             s    = scan_for_safety
@@ -365,20 +304,16 @@ class PursuitController:
                 range_min=rmin,
             )
 
-        # ── Emergency-duration timer (updated with the real flag) ─────────────
+        # Emergency-duration timer (updated with the real flag)
         if safety_emergency_now:
             if self._emergency_since is None:
                 self._emergency_since = now_ns
         elif self._state_for_timer_reset == FollowerState.TRACKING:
             # Only reset when cleanly back in TRACKING, not on momentary
-            # clears during SEARCH or DETOUR rotation.
             self._emergency_since = None
         self._prev_emergency = safety_emergency_now
 
-        # ── Stationary-duration timer ─────────────────────────────────────────
-        # Updated from the CALLER's _last_lin (post-slew) — see note in node.
-        # The controller exposes _update_stationary() for the node to call after
-        # it applies slew limiting so the timer reflects the actual output.
+        # Stationary-duration timer
         self._pending_linear_for_stationary = linear_x
 
         self._state_for_timer_reset = state
@@ -388,7 +323,6 @@ class PursuitController:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""
         if abs(actual_linear) < 1e-6:
             # Robot is stopped for any reason (emergency, detour suppressed,
-            # search) — start timer on first stop tick, keep accumulating.
             if self._stationary_since is None:
                 self._stationary_since = now_ns
         else:

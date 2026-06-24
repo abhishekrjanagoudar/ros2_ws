@@ -1,34 +1,6 @@
 #!/usr/bin/env python3
 """
-teleop_controller.py
-====================
 Burst-Mode (Hold-To-Move) keyboard teleoperation wrapper.
-Publishes TwistStamped to cmd_vel at a continuous fixed rate.
-
-FEATURE: BURST / HOLD-TO-MOVE
-Unlike standard teleop nodes that latch velocities, this node requires the user 
-to hold the key down to move. 
-- Single key press → small movement burst
-- Holding key      → continuous movement
-- Releasing key    → publishes zero velocity continuously
-
-This ensures the robot does not run away and gives precise control. It natively
-publishes geometry_msgs/msg/Twist to cmd_vel (required by Gazebo Harmonic bridge).
-
-USAGE:
-Run this node in the namespace of the robot you want to control.
-Example for tb1:
-  ros2 run multi_tb3_system teleop_controller.py --ros-args -r __ns:=/tb1
-
-Key bindings:
-  i / w  → forward
-  , / x  → backward
-  j / a  → rotate left
-  l / d  → rotate right
-  k / s  → stop immediately
-  q / z  → increase / decrease linear and angular speeds simultaneously
-  e / c  → increase / decrease angular speed only
-  Ctrl+C → exit
 """
 
 from __future__ import annotations
@@ -46,7 +18,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from geometry_msgs.msg import Twist
 
 
-# ─── Key mapping ──────────────────────────────────────────────────────────────
+# Key mapping
 
 MOVE_BINDINGS = {
     'i': ( 1,  0),   ',': (-1,  0),   'j': ( 0,  1),   'l': ( 0, -1),   'k': ( 0,  0),
@@ -62,27 +34,12 @@ SPEED_BINDINGS = {
 
 MSG = """
 ╔════════════════════════════════════════════════════╗
-║  TurtleBot3 Convoy — Burst-Mode Teleop             ║
-╠════════════════════════════════════════════════════╣
-║  Movement (Hold to move, release to stop!):        ║
-║    i / w        → forward                          ║
-║    , / x        → backward                         ║
-║    j / a        → rotate left                      ║
-║    l / d        → rotate right                     ║
-║    k / s        → force stop                       ║
-╠════════════════════════════════════════════════════╣
-║  Speed adjustment:                                 ║
-║    q / z        → overall faster / slower          ║
-║    e / c        → angular faster / slower          ║
-╠════════════════════════════════════════════════════╣
-║  CTRL+C         → quit                             ║
-╚════════════════════════════════════════════════════╝
 """
 
 SPEED_MSG = "\rLinear: {lin:.2f} m/s  |  Angular: {ang:.2f} rad/s    "
 
 
-# ─── Keyboard reader ──────────────────────────────────────────────────────────
+# Keyboard reader
 
 def get_key(timeout: float = 0.05) -> str:
     """Read a single keypress in raw mode (non-blocking)."""
@@ -99,13 +56,12 @@ def get_key(timeout: float = 0.05) -> str:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-# ─── Teleop Node ──────────────────────────────────────────────────────────────
+# Teleop Node
 
 class TeleopController(Node):
     """
-    Burst-mode keyboard teleop node.
-    Publishes Twist to cmd_vel at a continuous fixed rate (20 Hz).
-    """
+Burst-mode keyboard teleop node.
+"""
 
     def __init__(self) -> None:
         super().__init__('teleop_controller')
@@ -140,7 +96,6 @@ class TeleopController(Node):
         self.running = True
 
         # Timer for fixed-rate continuous publishing (20 Hz)
-        # Gazebo Harmonic needs a continuous stream of zeros to reliably halt.
         publish_rate_hz = 20.0
         self.timer = self.create_timer(1.0 / publish_rate_hz, self._timer_callback)
 
@@ -151,8 +106,6 @@ class TeleopController(Node):
         now = time.time()
         
         # Burst timeout logic: if no valid key pressed for > 0.15s, stop.
-        # 0.15s is short enough to feel "instant" but long enough to bridge the 
-        # typematic repeat rate (usually 30-50Hz) of the terminal.
         if (now - self.last_key_time) > 0.15:
             self.target_linear_x = 0.0
             self.target_angular_z = 0.0
@@ -209,14 +162,13 @@ class TeleopController(Node):
         self.cmd_pub.publish(msg)
 
 
-# ─── Entry point ──────────────────────────────────────────────────────────────
+# Entry point
 
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = TeleopController()
 
     # Spin rclpy in a background thread so the timer fires concurrently
-    # while the main thread blocks on terminal keyboard I/O.
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
 

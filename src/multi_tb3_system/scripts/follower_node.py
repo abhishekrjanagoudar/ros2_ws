@@ -1,65 +1,6 @@
 #!/usr/bin/env python3
 """
-follower_node.py
-================
 ROS 2 node shell for the Path-Based Convoy follower.
-
-This file owns **only**:
-  * ROS parameter declarations and reads
-  * Subscriber / publisher / timer creation
-  * Message-cache callbacks (_odom_cb, _path_cb, _scan_cb)
-  * Output smoothing and publishing (_publish_smoothed)
-  * main()
-
-All convoy algorithm logic lives in ``motion_controller.PursuitController``.
-To tune control behaviour, edit motion_controller.py — not this file.
-
-Architecture
-------------
-The leader (tb1) publishes its travelled trajectory as a nav_msgs/Path on
-``/<leader_ns>/convoy_path`` (frame = ``world``). Every follower subscribes
-to that single shared path and tracks it with a Pure Pursuit controller
-while holding a configurable gap behind the robot ahead.
-
-  * Lateral control : Pure Pursuit (lookahead point on the path).
-  * Longitudinal     : proportional to remaining arc-length to the goal
-                       point, so the convoy spacing is self-regulating.
-  * LiDAR            : used by SafetyController for emergency stop / steer
-                       bias AND by the in-process costmap builder for the
-                       TRACKING / DETOUR / EMERGENCY_STOP / SEARCH / HOLD
-                       state machine.
-
-Frames
-------
-Each robot's ``odom`` is anchored to ``world`` by a static transform at its
-spawn position, with zero rotation. So the robot's world pose is simply
-``odom + spawn_offset``. The spawn offset is supplied via parameters
-(spawn_offset_x / spawn_offset_y) by the launch file.
-
-Parameters
-----------
-  leader_ns                    (str,   'tb1')
-  convoy_spacing               (float, 0.5)   gap per convoy slot [m]
-  lookahead_distance           (float, 0.5)   Pure Pursuit lookahead [m]
-  kp_linear                    (float, 0.8)
-  kp_angular                   (float, 1.5)
-  max_linear_velocity          (float, 0.22)
-  max_angular_velocity         (float, 1.0)
-  safe_distance                (float, 0.35)
-  control_frequency            (float, 50.0)  Hz
-  max_linear_accel             (float, 1.0)   m/s^2 command slew limit
-  max_angular_accel            (float, 3.0)   rad/s^2 command slew limit
-  goal_tolerance               (float, 0.4)   Euclidean stop threshold [m]
-  spawn_offset_x/y             (float, 0.0)   odom->world translation
-  costmap_size                 (float, 3.0)   square costmap span [m]
-  costmap_resolution           (float, 0.05)  cell size [m]
-  costmap_publish_rate         (float, 10.0)  informational; build runs each cycle
-  costmap_stale_timeout        (float, 1.0)   clear costmap if scan older [s]
-  detour_forward_min_vel       (float, 0.06)  DETOUR creep [m/s]
-  stationary_deadlock_timeout  (float, 2.0)   escalate to SEARCH after this [s]
-  emergency_recovery_timeout   (float, 0.5)   informational [s]
-  search_angular_velocity      (float, 0.6)   rotate-in-place rate [rad/s]
-  breadcrumb_timeout           (float, 10.0)  [0.1, 600] (R7.5)
 """
 
 import math
@@ -87,7 +28,7 @@ class FollowerNode(Node):
     def __init__(self) -> None:
         super().__init__('follower_node')
 
-        # ── Parameters ──────────────────────────────────────────────────────
+        # Parameters
         self.declare_parameter('leader_ns', 'tb1')
         self.declare_parameter('convoy_spacing', 0.6)  # must match SPAWN_X_STEP in launch_common.py and follower_params.yaml
         self.declare_parameter('lookahead_distance', 0.5)
@@ -167,7 +108,7 @@ class FollowerNode(Node):
             safety=safety,
         )
 
-        # ── Message caches (written by callbacks, read by control loop) ──────
+        # Message caches (written by callbacks, read by control loop)
         self._pose: Optional[Tuple[float, float, float]] = None
         self._path: List[Tuple[float, float]]            = []
         self._scan: Optional[LaserScan]                  = None
@@ -178,7 +119,6 @@ class FollowerNode(Node):
         self._prev_newest_stamp_ns: int  = 0
 
         # Tracks whether the control loop has successfully run at least once.
-        # Used to gate pre-mission timer resets (see _control_loop).
         self._has_ever_tracked: bool = False
 
         # Output smoothing state
@@ -186,7 +126,7 @@ class FollowerNode(Node):
         self._last_ang: float = 0.0
         self._dt = 1.0 / float(self.control_frequency)
 
-        # ── ROS wiring ───────────────────────────────────────────────────────
+        # ROS wiring
         qos = QoSProfile(depth=10,
                          reliability=ReliabilityPolicy.BEST_EFFORT,
                          durability=DurabilityPolicy.VOLATILE)
@@ -213,7 +153,7 @@ class FollowerNode(Node):
             f"deadlock_timeout={gp('stationary_deadlock_timeout'):.1f}s"
         )
 
-    # ── Callbacks: cache only ────────────────────────────────────────────────
+    # Callbacks: cache only
 
     def _odom_cb(self, msg: Odometry) -> None:
         p = msg.pose.pose.position
@@ -226,8 +166,6 @@ class FollowerNode(Node):
 
     def _path_cb(self, msg: Path) -> None:
         # Guard: ignore empty Path messages published during startup before the
-        # leader's first odom arrives. Processing them would set _path=[] and
-        # corrupt _last_newest_time_ns / breadcrumb freshness state (Prompt 3).
         if not msg.poses:
             return
 
@@ -251,15 +189,11 @@ class FollowerNode(Node):
         self._scan         = msg
         self._scan_time_ns = self.get_clock().now().nanoseconds
 
-    # ── Control loop ─────────────────────────────────────────────────────────
+    # Control loop
 
     def _control_loop(self) -> None:
         if self._pose is None or len(self._path) < 2:
             # Nothing to track yet — publish zero.
-            # Only reset deadlock timers during pre-mission startup (before
-            # _has_ever_tracked is set). Once tracking has started, a transient
-            # path dropout mid-mission must NOT clear the timers — doing so
-            # would prevent SEARCH from escalating if the path disappears.
             if not self._has_ever_tracked:
                 self._controller._stationary_since = None
                 self._controller._emergency_since  = None
@@ -288,7 +222,7 @@ class FollowerNode(Node):
         # Stationary timer uses the post-slew actual command (self._last_lin).
         self._controller.update_stationary_timer(self._last_lin, now_ns)
 
-    # ── Output smoothing ─────────────────────────────────────────────────────
+    # Output smoothing
 
     def _publish_smoothed(self, linear_x: float, angular_z: float) -> None:
         """Clamp then slew-limit against the previous command before publishing."""

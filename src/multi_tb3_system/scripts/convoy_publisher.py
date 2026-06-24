@@ -1,17 +1,6 @@
 #!/usr/bin/env python3
 """
 convoy_publisher.py — Publishes the leader's path for all followers to track.
-
-This implements the Path-Based Convoy architecture. The leader (tb1) acts as
-the orchestrator by publishing a single ground-truth nav_msgs/Path in the
-``world`` frame. All followers subscribe to this shared path and track it with
-Pure Pursuit, which eliminates the error accumulation of daisy-chained
-follow-the-robot-ahead designs.
-
-The leader's odom is anchored to ``world`` by a static transform at its spawn
-position (zero rotation). The published path is therefore expressed in
-``world`` coordinates by adding the leader's spawn offset to each odom pose.
-For tb1 spawned at the origin the offset is (0, 0).
 """
 
 import math
@@ -86,11 +75,6 @@ class ConvoyPublisher(Node):
 
     def publish_path(self):
         # Persistent-publication contract (R5.1, R5.2, R5.5, R5.6): the path is
-        # published at 50 Hz with a fresh header timestamp on every tick,
-        # regardless of Leader motion. When no Breadcrumb has been recorded yet
-        # (no odom received), an empty Path is still published on schedule.
-        # Followers rely on this steady cadence and timestamp for staleness
-        # detection.
         self.path_msg.header.stamp = self.get_clock().now().to_msg()
         self.path_msg.header.frame_id = self.frame
         self.path_pub.publish(self.path_msg)

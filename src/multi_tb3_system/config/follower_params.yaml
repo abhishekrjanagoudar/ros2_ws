@@ -1,69 +1,47 @@
-# follower_node.py parameters — Path-Based Convoy (Pure Pursuit)
-# distances in m, velocities in m/s, angles in rad.
-#
-# leader_ns, spawn_offset_x/y are set at launch time by followers.launch.py.
-# Defaults here are fallback-only.
+# follower_node.py parameters
 
 follower_node:
   ros__parameters:
 
     leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
-    # ── Convoy spacing ───────────────────────────────────────────────────
-    # ⚠️  KEEP IN SYNC with:
-    #     - SPAWN_X_STEP (abs value) in multi_tb3_system/launch_common.py
-    #     - convoy_spacing default   in scripts/follower_node.py
-    # All three must equal 0.5 m or followers will burst-correct at startup.
+    # Convoy spacing
     convoy_spacing:       0.6     # gap per convoy slot [m] (tb2=1x=0.6m, tb3=2x=1.2m)
     goal_tolerance:       0.12    # stop when within this distance of goal [m] (realistic for 20 Hz + slew limits)
 
-    # ── Pure Pursuit ─────────────────────────────────────────────────────
+    # Pure Pursuit
     lookahead_distance:   0.25    # lookahead point distance along the path [m] — must be < gap/2 (gap = convoy_spacing × (slot-1))
     kp_linear:            0.6     # forward speed gain on spacing error
     kp_angular:           1.8     # heading gain (large-misalignment recovery)
 
-    # ── Limits ───────────────────────────────────────────────────────────
+    # Limits
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
-    # LiDAR hard-stop distance (SafetyController) [m]. Reduced to 0.15m so
-    # followers approach obstacles closely before triggering emergency stop.
-    # Must remain < predecessor_gap * 0.3 (= 0.18m) so the predecessor
-    # filter window still covers the convoy robot ahead.
+    # LiDAR hard-stop distance (SafetyController) [m]
     safe_distance:        0.15
 
-    # ── Convoy predecessor filtering ──────────────────────────────────────
-    # Ignore LiDAR returns from the convoy robot directly ahead so it is
-    # never mistaken for a real obstacle. Set equal to convoy_spacing.
-    # Filter window [predecessor_gap*0.3, predecessor_gap*1.2] = [0.18m, 0.72m].
-    # safe_distance=0.15m < 0.18m lower bound, so real close obstacles still
-    # trigger emergency stop correctly.
+    # Convoy predecessor filtering
     predecessor_gap:      0.6     # must equal convoy_spacing [m]
 
 
-    # ── Control loop / smoothing ─────────────────────────────────────────
-    # 20 Hz: LiDAR publishes at ~5 Hz so the safety layer is stale for
-    # 10+ control cycles at 50 Hz with no benefit. 20 Hz gives 4×
-    # oversampling of the sensor rate while halving CPU load.
+    # Control loop / smoothing
     control_frequency:    20.0    # Hz — cmd_vel publish / control rate
     max_linear_accel:     2.0     # m/s^2 — command slew limit (faster ramp-up to match leader acceleration)
     max_angular_accel:    3.0     # rad/s^2 — command slew limit
 
-    # ── Local costmap (LiDAR-derived occupancy grid) ─────────────────────
+    # Local costmap (LiDAR-derived occupancy grid)
     costmap_size:                3.0   # span of square local costmap [m]
     costmap_resolution:          0.05  # cell size [m] (3.0/0.05 = 60x60 = 3600 cells)
     costmap_publish_rate:        10.0  # Hz (>=5 Hz) — informational; in-process build runs each control cycle
     costmap_stale_timeout:       1.0   # clear costmap if no new scan within this many seconds
 
-    # ── Obstacle-avoidance state machine ─────────────────────────────────
+    # Obstacle-avoidance state machine
     detour_forward_min_vel:      0.10  # forward creep maintained during DETOUR [m/s] (more assertive to clear narrow gaps)
     stationary_deadlock_timeout: 3.5   # escalate to SEARCH after this many continuous stationary seconds [s] (give DETOUR time to work)
     emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
     search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
 
-    # ── Persistent leader tracking ───────────────────────────────────────
-    # stop only after no newer breadcrumbs for this long AND final goal
-    # reached [s]. Must be > tb3 max catch-up time (1.2m / 0.22m/s ≈ 6s
-    # from start). 12s gives safe margin for slow startup and obstacles.
+    # Persistent leader tracking
     breadcrumb_timeout:          12.0
 
 costmap_generator:

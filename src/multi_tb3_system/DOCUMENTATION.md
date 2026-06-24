@@ -74,12 +74,10 @@ ros2_ws/src/multi_tb3_system/
 │   ├── gazebo.launch.py               # Gz server + optional GUI + clock bridge
 │   ├── spawn_robots.launch.py         # N+1 robot spawning with staggered timing
 │   ├── followers.launch.py            # convoy_publisher + follower_node per follower
-│   ├── mapping.launch.py              # slam_toolbox SLAM integration
 │   └── rviz.launch.py                 # RViz2 visualization
 │
 ├── config/
 │   ├── follower_params.yaml           # Pure Pursuit gains, spacing, limits
-│   ├── mapping_online_async.yaml      # slam_toolbox params (tuned for TB3 Burger)
 │   └── cpr_office/                    # CPR Office world assets
 │
 ├── worlds/
@@ -120,10 +118,7 @@ sudo apt install -y \
   ros-jazzy-ros-gz-sim \
   ros-jazzy-rviz2 \
   ros-jazzy-xacro \
-  ros-jazzy-tf2-tools \
-  ros-jazzy-slam-toolbox \
-  ros-jazzy-nav2-map-server \
-  ros-jazzy-nav2-lifecycle-manager
+  ros-jazzy-tf2-tools
 ```
 
 ### Build
@@ -162,11 +157,8 @@ ros2 launch multi_tb3_system robot.launch.py [args]
 | `rviz` | `false` | Show RViz2 |
 | `ros_ui` | `false` | Shortcut: `true` sets `gz=true` + `rviz=true` |
 | `convoy_spacing` | `0.6` | Gap per convoy slot in metres; forwarded to `followers.launch.py` |
-| `enable_mapping` | `false` | Start slam_toolbox SLAM |
-| `mapping_mode` | `online_async` | SLAM algorithm mode |
-| `slam_robot` | `tb1` | Which robot(s) build the map: `tb1`, `tb2`, `tb3`, or `all` |
 
-**Implementation — `_resolve_ui_flags` (OpaqueFunction):** resolves `ros_ui` override, then includes `worlds.launch.py`, `spawn_robots.launch.py`, `followers.launch.py`, and conditionally `rviz.launch.py` and `mapping.launch.py`.
+**Implementation — `_resolve_ui_flags` (OpaqueFunction):** resolves `ros_ui` override, then includes `worlds.launch.py`, `spawn_robots.launch.py`, `followers.launch.py`, and conditionally `rviz.launch.py`.
 
 ---
 
@@ -232,8 +224,8 @@ Starts `convoy_publisher` on the leader and one `follower_node` per follower. Al
 
 | Robot | Formula | Start time |
 |:---:|---|:---:|
-| tb2 | `spawn_delay(2) + FOLLOWER_INIT_BUFFER = 3 + 1` | 4 s |
-| tb3 | `spawn_delay(3) + FOLLOWER_INIT_BUFFER = 6 + 1` | 7 s |
+| tb2 | `FOLLOWER1_START` | 1.00 s |
+| tb3 | `FOLLOWER2_START` | 1.25 s |
 
 ---
 
@@ -243,15 +235,6 @@ Starts RViz2 with `rviz/multi_robot.rviz`. Fixed frame: `world`.
 
 ---
 
-### 4.7 `mapping.launch.py`
-
-Starts `slam_toolbox` online_async, `nav2_map_server` map_saver_server, and a lifecycle manager.
-
-**Arguments:** `slam_robot` (`tb1`/`tb2`/`tb3`/`all`), `mapping_mode`, `autostart`, `use_sim_time`
-
-`slam_robot=all` launches one slam_toolbox instance per robot in the appropriate namespace.
-
----
 
 ## 5. Nodes
 
@@ -398,8 +381,9 @@ safe_lin, safe_ang = ctrl.check_and_modify(linear_x, angular_z, ranges, ...)
 
 | Priority | Rule | Zone | Action |
 |:---:|---|:---:|---|
+| 0 | Predecessor Filter | ±15° front | Returns in `[predecessor_gap*0.3, predecessor_gap*1.2]` are ignored to avoid stopping for the convoy ahead. |
 | 1 | Emergency stop | ±45° front | Obstacle < `safe_distance` → `linear_x = 0` (angular unchanged) |
-| 2 | Steering bias | ±60°, within 0.8 m | Nudge away from closer side: `angular_z ±= 0.5 × bias` |
+| 2 | Steering bias | ±60°, within 0.5 m | Nudge away from closer side: `angular_z ±= 0.5 × bias` |
 | 3 | Velocity clamp | — | Clamp to `±max_linear_vel` and `±max_angular_vel` |
 
 ---
@@ -474,21 +458,22 @@ follower_node:
 
     # Convoy spacing
     convoy_spacing:       0.6     # gap per slot [m] (tb2=1×, tb3=2×)
-    goal_tolerance:       0.10    # stop when forward distance to goal <= this [m]
+    goal_tolerance:       0.12    # stop when forward distance to goal <= this [m]
 
     # Pure Pursuit
-    lookahead_distance:   0.5     # lookahead arc-length along path [m]
-    kp_linear:            0.8     # speed gain on spacing error
-    kp_angular:           1.5     # heading gain (large-misalignment recovery)
+    lookahead_distance:   0.25    # lookahead arc-length along path [m]
+    kp_linear:            0.6     # speed gain on spacing error
+    kp_angular:           1.8     # heading gain (large-misalignment recovery)
 
     # Limits
     max_linear_velocity:  0.22    # [m/s]
     max_angular_velocity: 1.0     # [rad/s]
-    safe_distance:        0.4     # LiDAR emergency stop [m]
+    safe_distance:        0.15    # LiDAR emergency stop [m]
+    predecessor_gap:      0.6     # filtering window for the robot directly ahead [m]
 
     # Control loop
-    control_frequency:    50.0    # Hz
-    max_linear_accel:     1.0     # m/s²
+    control_frequency:    20.0    # Hz
+    max_linear_accel:     2.0     # m/s²
     max_angular_accel:    3.0     # rad/s²
 ```
 
@@ -498,21 +483,6 @@ follower_node:
 
 ---
 
-### 7.2 `config/mapping_online_async.yaml`
-
-slam_toolbox configuration tuned for TurtleBot3 Burger LDS-01.
-
-| Parameter | Default | Description |
-|---|:---:|---|
-| `resolution` | `0.05` | Map cell size (m/pixel) |
-| `max_laser_range` | `3.5` | LDS-01 max range (m) |
-| `min_laser_range` | `0.12` | LDS-01 min range (m) |
-| `minimum_travel_distance` | `0.3` | Min motion (m) before new scan processed |
-| `minimum_travel_heading` | `0.3` | Min rotation (rad) before new scan processed |
-| `map_update_interval` | `3.0` | Seconds between map publications |
-| `do_loop_closing` | `true` | Enable loop closure detection |
-
----
 
 ## 8. Worlds
 
@@ -602,14 +572,15 @@ world                              ← shared static root
 ## 11. Timing Sequence
 
 ```
-t = 0 s   Gazebo server starts
-          tb1 spawns (x=0.0): RSP + bridge + static_tf world→tb1/odom
-t = 2 s   convoy_publisher starts in /tb1 namespace
-          (odom and bridge settled; path recording begins)
-t = 3 s   tb2 spawns (x=-1.0): RSP + bridge + static_tf world→tb2/odom
-t = 4 s   tb2/follower_node starts   [spawn_delay(2) + FOLLOWER_INIT_BUFFER = 3+1]
-t = 6 s   tb3 spawns (x=-2.0): RSP + bridge + static_tf world→tb3/odom
-t = 7 s   tb3/follower_node starts   [spawn_delay(3) + FOLLOWER_INIT_BUFFER = 6+1]
+t = 0.0 s   Gazebo server starts
+            tb1 spawns (x=0.0): RSP + bridge + static_tf world→tb1/odom
+t = 0.0 s   convoy_publisher starts in /tb1 namespace
+            (path recording begins immediately)
+t = 0.38 s  costmap_generator nodes start
+t = 1.0 s   tb2/follower_node starts
+t = 1.25 s  tb3/follower_node starts
+t = 3.0 s   tb2 spawns (x=-1.0): RSP + bridge + static_tf world→tb2/odom
+t = 6.0 s   tb3 spawns (x=-2.0): RSP + bridge + static_tf world→tb3/odom
 ```
 
 **Why the delays:** `FOLLOWER_INIT_BUFFER = 1.0 s` ensures the Gazebo entity, DiffDrive plugin, and `ros_gz_bridge` are fully initialized before `cmd_vel` flows. `convoy_publisher` waits 2 s so tb1's odom + bridge are live before path recording starts.
@@ -807,3 +778,27 @@ Positive `gx` = goal is ahead → drive forward. Negative `gx` = overshoot → s
 **Issue:** In `multi_robot.rviz`, the `rviz_default_plugins/Map` plugin for cost maps produced an error: `Error subscribing: Invalid topic Name: name must not be a empty string...`. This occurs when the `Update Topic` value is missing or set to an empty string (`""`), causing RViz to fail parsing the topic path.
 
 **Fix:** Explicitly populated the `Update Topic` property with a valid string appending the `_updates` suffix for all local and global cost maps (e.g., `/tb1/local_costmap_updates`). Also expanded the `multi_robot.rviz` configuration to include Local Costmaps, Global Costmaps, and the global SLAM `/map`.
+
+---
+
+### 14.9 Predecessor Filtering
+
+**Issue:** Followers would sometimes emergency stop because they detected the convoy robot directly ahead of them as an obstacle, especially on tight turns.
+
+**Fix:** `safety_controller.py` now implements a `filter_predecessor_returns()` method. It ignores LiDAR returns within a narrow forward cone (±15°) if the distance is within an expected window (`[predecessor_gap*0.3, predecessor_gap*1.2]`). This allows followers to drive much closer without false-positive safety stops.
+
+---
+
+### 14.10 SEARCH Reverse-Arc Escape
+
+**Issue:** The `SEARCH` state merely rotated the follower in place to find a clear path, which failed if the follower was pressed tight up against a convex pillar.
+
+**Fix:** `build_search_command` now performs a reverse-arc escape. The follower backs up slightly (`-0.08 m/s`) while turning, which naturally peels it off the pillar and creates enough clearance to resume following.
+
+---
+
+### 14.11 Removal of SLAM and Mapping
+
+**Issue:** Running `slam_toolbox` and `nav2_map_server` incurred significant CPU overhead and was unnecessary since followers use a purely local costmap for detours and Pure Pursuit for convoy tracking.
+
+**Fix:** All mapping code, configurations, and ROS dependencies have been completely removed. Obstacle avoidance now relies entirely on the lightweight `costmap_generator` which produces a local 60x60 grid updated directly from the LiDAR.

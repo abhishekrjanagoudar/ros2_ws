@@ -1,19 +1,6 @@
 #!/usr/bin/env python3
 """
 spawn_robots.launch.py — spawns N+1 TurtleBot3 robots (leader + followers).
-
-Each robot gets: Gazebo entity + robot_state_publisher + ros_gz_bridge +
-a static transform publisher anchoring world → tbX/odom at spawn position.
-All odom frames share `world` as a common TF root so RViz can render all
-robots with a single fixed frame.
-generate_sdf patches all plugin topics to absolute /tbX/... paths — no remapping needed.
-
-Formation geometry and staggered-spawn timing live in
-``multi_tb3_system.launch_common`` (shared with followers.launch.py).
-
-Args:
-  nBurger     : follower count 1–2 (default 2)
-  use_sim_time: 'true' (default) | 'false'
 """
 
 from launch import LaunchDescription
@@ -80,7 +67,6 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool) -> lis
     )
 
     # Anchor tbX/odom to shared world frame at spawn position so all TF trees share a root.
-    # Without this, tb2/tb3 odom frames are disconnected from tb1/odom → RViz errors.
     static_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',

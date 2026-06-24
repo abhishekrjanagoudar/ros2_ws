@@ -26,9 +26,7 @@
 
 ```bash
 sudo apt install -y \
-  ros-jazzy-turtlebot3 ros-jazzy-turtlebot3-gazebo \
-  ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge ros-jazzy-rviz2 \
-  ros-jazzy-slam-toolbox ros-jazzy-nav2-map-server
+  ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge ros-jazzy-rviz2
 ```
 
 Add to `~/.bashrc`:
@@ -69,13 +67,11 @@ Hold a key to move, release to stop. Followers start automatically.
 |---|:---:|---|
 | `world` | `empty` | `empty`, `pillars`, `office` |
 | `nBurger` | `2` | Follower count (1–2) |
-| `convoy_spacing` | `0.5` | Gap per slot in metres |
+| `convoy_spacing` | `0.6` | Gap per slot in metres |
 | `ros_ui` | `false` | `true` = RViz + Gazebo GUI + costmap viz |
 | `gz` | `false` | Gazebo GUI only |
 | `rviz` | `false` | RViz + costmap viz only |
 | `use_sim_time` | `true` | Sim clock or wall clock |
-| `enable_mapping` | `false` | Start slam_toolbox |
-| `slam_robot` | `tb1` | `tb1`, `tb2`, `tb3`, `all` |
 
 ---
 
@@ -102,26 +98,12 @@ multi_tb3_system/
 │   ├── robot.launch.py             # ⭐ Entry point
 │   ├── followers.launch.py         # Starts convoy_publisher + costmap + followers
 │   ├── spawn_robots.launch.py
-│   ├── gazebo.launch.py / worlds.launch.py
-│   ├── mapping.launch.py
 │   └── rviz.launch.py
 ├── config/
-│   ├── follower_params.yaml        # All tunable parameters (single source of truth)
-│   └── mapping_online_async.yaml
+│   └── follower_params.yaml        # All tunable parameters (single source of truth)
 ├── worlds/
 │   ├── empty.world
 │   └── pillars.world
 └── models/turtlebot3_burger/
 ```
 
----
-
-## SLAM Mapping
-
-```bash
-# Launch with mapping
-ros2 launch multi_tb3_system robot.launch.py enable_mapping:=true ros_ui:=true
-
-# Save the map
-ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
-```

@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
 """
-safety_controller.py
-====================
 Safety layer for the Multi-TurtleBot3 convoy follower nodes.
-
-Responsibilities:
-  - Monitor the 180° front-half of the LaserScan for dangerously close obstacles
-  - Issue emergency stop commands when something is within safe_distance
-  - Apply gentle steering bias to avoid close obstacles on either side
-  - Apply velocity limiting (clamp max linear and angular)
-
-This module does NOT do any target tracking; it purely enforces hard limits.
-
-Public API
-----------
-check_and_modify(linear_x, angular_z, ranges, ...)
-    Apply safety rules; return (safe_linear_x, safe_angular_z).
-    Preserved for callers that do not need the emergency flag.
-
-check_and_modify_ex(linear_x, angular_z, ranges, ...)
-    Single-pass variant; return (safe_linear_x, safe_angular_z, is_emergency).
-    Preferred in follower_node._control_loop() to avoid scanning the LiDAR
-    array twice per 50 Hz cycle (once for the state-machine input and once
-    inside the hard override).
-
-is_emergency(ranges, ...)
-    Return True if an obstacle is inside the ±45° front cone.
 """
 
 from __future__ import annotations
@@ -34,7 +9,7 @@ import math
 from typing import List, Tuple
 
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+# Constants
 EMERGENCY_HALF_ANGLE_DEG = 45.0    # unchanged — cone angle stays the same
 STEER_HALF_ANGLE_DEG     = 60.0    # unchanged — cone angle stays the same
 STEER_INFLUENCE_RANGE    = 0.5     # reduced 50%: only steer-bias obstacles within 0.5m
@@ -42,11 +17,8 @@ STEER_INFLUENCE_RANGE    = 0.5     # reduced 50%: only steer-bias obstacles with
 
 class SafetyController:
     """
-    Velocity safety layer.
-
-    Use check_and_modify_ex() in tight control loops (single LiDAR pass).
-    Use check_and_modify() where backward compatibility is required.
-    """
+Velocity safety layer.
+"""
 
     def __init__(
         self,
@@ -56,23 +28,14 @@ class SafetyController:
         predecessor_gap: float = 0.0,
     ) -> None:
         """
-        Initialize the safety controller.
-
-        Args:
-            safe_distance:   Hard stop distance — if anything is closer than
-                             this in front, set linear velocity to zero. [m]
-                             Must be strictly less than convoy_spacing (0.5 m)
-                             so the robot ahead at the nominal gap does not
-                             trigger an emergency stop.
-            max_linear_vel:  Velocity clamp — never exceed this [m/s].
-            max_angular_vel: Angular rate clamp [rad/s].
-        """
+Initialize the safety controller.
+"""
         self.safe_distance   = safe_distance
         self.max_linear_vel  = max_linear_vel
         self.max_angular_vel = max_angular_vel
         self.predecessor_gap = predecessor_gap
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # Private helpers
 
     def _scan_sides(
         self,
@@ -81,17 +44,9 @@ class SafetyController:
         angle_increment: float,
         range_min: float,
     ) -> Tuple[float, float, bool]:
-        """Single pass over the LaserScan array.
-
-        Returns
-        -------
-        (min_left, min_right, is_emergency)
-            min_left / min_right : closest valid range in the ±60° steering
-                cone on each side; float('inf') if nothing is within
-                STEER_INFLUENCE_RANGE.
-            is_emergency : True if any valid return inside the ±45° front cone
-                is closer than self.safe_distance.
         """
+Returns
+"""
         emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
         steer_half     = math.radians(STEER_HALF_ANGLE_DEG)
 
@@ -113,11 +68,11 @@ class SafetyController:
                 if lo <= r <= hi:
                     continue
 
-            # ─── Emergency cone (±45°) ────────────────────────────────────
+            # Emergency cone (±45°)
             if abs(angle) <= emergency_half and r < self.safe_distance:
                 is_emerg = True
 
-            # ─── Steering cone (±60°) ─────────────────────────────────────
+            # Steering cone (±60°)
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
                 if angle >= 0:
                     min_left  = min(min_left,  r)
@@ -147,13 +102,13 @@ class SafetyController:
                 bias = (STEER_INFLUENCE_RANGE - min_right) / STEER_INFLUENCE_RANGE
                 angular_z += 0.5 * bias
 
-        # ─── Velocity clamping ────────────────────────────────────────────
+        # Velocity clamping
         linear_x  = max(-self.max_linear_vel,  min(linear_x,  self.max_linear_vel))
         angular_z = max(-self.max_angular_vel,  min(angular_z, self.max_angular_vel))
 
         return linear_x, angular_z
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # Public API
 
     def check_and_modify(
         self,
@@ -165,30 +120,8 @@ class SafetyController:
         range_min: float = 0.12,
     ) -> Tuple[float, float]:
         """
-        Apply safety rules and return the (possibly modified) velocity pair.
-
-        Rules applied in order:
-          1. Emergency stop: if any obstacle in ±EMERGENCY_HALF_ANGLE_DEG
-             is closer than safe_distance → stop linear motion, allow recovery.
-          2. Steering bias: if obstacles are close on one side, nudge away.
-          3. Velocity clamping: ensure |linear| <= max_linear_vel
-                                and |angular| <= max_angular_vel.
-
-        Args:
-            linear_x:         Proposed linear velocity [m/s]
-            angular_z:        Proposed angular velocity [rad/s]
-            ranges:           LaserScan.ranges array
-            angle_min:        LaserScan.angle_min [rad]
-            angle_increment:  LaserScan.angle_increment [rad/rad]
-            range_min:        Minimum valid range [m]
-
-        Returns:
-            (safe_linear_x, safe_angular_z)
-
-        Note:
-            Prefer check_and_modify_ex() in hot control loops to avoid
-            scanning the LiDAR array twice per cycle.
-        """
+Apply safety rules and return the (possibly modified) velocity pair.
+"""
         min_left, min_right, is_emerg = self._scan_sides(
             ranges, angle_min, angle_increment, range_min,
         )
@@ -204,22 +137,8 @@ class SafetyController:
         range_min: float = 0.12,
     ) -> Tuple[float, float, bool]:
         """
-        Single-pass safety check — preferred in tight control loops.
-
-        Scans the LiDAR array exactly once to determine both the emergency flag
-        (needed by the state machine) and the steering / clamping adjustments
-        (the hard override), returning all three results together.
-
-        Args:
-            Same as check_and_modify().
-
-        Returns:
-            (safe_linear_x, safe_angular_z, is_emergency)
-                safe_linear_x  : velocity after safety rules and clamping [m/s]
-                safe_angular_z : angular rate after safety rules and clamping [rad/s]
-                is_emergency   : True iff an obstacle was inside the ±45° front
-                                 cone at a distance < safe_distance.
-        """
+Single-pass safety check — preferred in tight control loops.
+"""
         min_left, min_right, is_emerg = self._scan_sides(
             ranges, angle_min, angle_increment, range_min,
         )
@@ -266,7 +185,7 @@ class SafetyController:
                 filtered[i] = float('inf')
         return filtered
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # 
 
     def get_emergency_stop_twist(self) -> Tuple[float, float]:
         """Return zero-velocity command (full stop)."""

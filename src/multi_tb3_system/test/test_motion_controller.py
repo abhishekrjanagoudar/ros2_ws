@@ -42,7 +42,6 @@ class TestMotionController(unittest.TestCase):
         )
         
         # We start in HOLD because PursuitController doesn't have a state initialized
-        # to SEARCHING. Wait, the state is stateless, returned by `step`.
         
         # In search mode, without path, step should return zero velocities and SEARCHING
         v, w, is_emerg = controller.step(None, None, None, 1000)
