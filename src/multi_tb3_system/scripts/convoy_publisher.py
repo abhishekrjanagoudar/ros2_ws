@@ -28,7 +28,7 @@ class ConvoyPublisher(Node):
         super().__init__('convoy_publisher')
 
         self.declare_parameter('max_path_poses', 5000)
-        self.declare_parameter('path_resolution', 0.02)
+        self.declare_parameter('path_resolution', 0.01)
         self.declare_parameter('path_frame', 'world')
         self.declare_parameter('spawn_offset_x', 0.0)
         self.declare_parameter('spawn_offset_y', 0.0)

@@ -63,8 +63,8 @@ def _launch_setup(context, *args, **kwargs):
 
     CONVOY_PUB_START  = 0.0    # leader path recording — start immediately
     COSTMAP_START     = 0.75   # per-robot costmap generator — after scan is live
-    FOLLOWER1_START   = 2.5    # tb2 follower node
-    FOLLOWER2_START   = 3.5    # tb3 follower node — 1s after tb2
+    FOLLOWER1_START   = 1.25   # tb2 follower node
+    FOLLOWER2_START   = 1.75   # tb3 follower node — 0.5s after tb2
 
     # ── Leader trajectory publisher (tb1) ────────────────────────────────────
     convoy_pub = Node(
