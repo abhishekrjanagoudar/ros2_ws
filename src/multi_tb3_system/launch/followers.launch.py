@@ -56,13 +56,13 @@ def _launch_setup(context, *args, **kwargs):
     # ── Startup timeline (all times relative to when this launch file is invoked,
     #    which is AFTER Gazebo + all robots are already spawned and bridges are up)
     #
-    #   t=0.0s  : convoy_publisher starts on tb1 (leader recording begins immediately)
-    #   t=0.75s : costmap_generator nodes start (scan stream is live by this point)
-    #   t=2.5s  : follower_node tb2 starts (Follower 1 begins tracking)
-    #   t=3.5s  : follower_node tb3 starts (Follower 2 begins tracking, 1s after tb2)
+    #   t=0.00s : convoy_publisher starts on tb1
+    #   t=0.38s : costmap_generator nodes start
+    #   t=1.25s : follower_node tb2 starts
+    #   t=1.75s : follower_node tb3 starts (0.5s after tb2)
 
     CONVOY_PUB_START  = 0.0    # leader path recording — start immediately
-    COSTMAP_START     = 0.75   # per-robot costmap generator — after scan is live
+    COSTMAP_START     = 0.38   # per-robot costmap generator — after scan is live
     FOLLOWER1_START   = 1.25   # tb2 follower node
     FOLLOWER2_START   = 1.75   # tb3 follower node — 0.5s after tb2
 

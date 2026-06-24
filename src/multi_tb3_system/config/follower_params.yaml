@@ -25,10 +25,19 @@ follower_node:
     # ── Limits ───────────────────────────────────────────────────────────
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
-    # ⚠️  safe_distance must be strictly < convoy_spacing (0.5 m).
-    # At the nominal gap the robot directly ahead would fall in the
-    # emergency-stop cone if this value equals or exceeds convoy_spacing.
-    safe_distance:        0.30    # LiDAR hard-stop distance (SafetyController) [m]
+    # LiDAR hard-stop distance (SafetyController) [m]. Reduced to 0.15m so
+    # followers approach obstacles closely before triggering emergency stop.
+    # Must remain < predecessor_gap * 0.3 (= 0.18m) so the predecessor
+    # filter window still covers the convoy robot ahead.
+    safe_distance:        0.15
+
+    # ── Convoy predecessor filtering ──────────────────────────────────────
+    # Ignore LiDAR returns from the convoy robot directly ahead so it is
+    # never mistaken for a real obstacle. Set equal to convoy_spacing.
+    # Filter window [predecessor_gap*0.3, predecessor_gap*1.2] = [0.18m, 0.72m].
+    # safe_distance=0.15m < 0.18m lower bound, so real close obstacles still
+    # trigger emergency stop correctly.
+    predecessor_gap:      0.6     # must equal convoy_spacing [m]
 
 
     # ── Control loop / smoothing ─────────────────────────────────────────
@@ -52,7 +61,10 @@ follower_node:
     search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
 
     # ── Persistent leader tracking ───────────────────────────────────────
-    breadcrumb_timeout:          5.0   # stop only after no newer breadcrumbs for this long AND final goal reached [s] (range: 0.1 to 600; faster HOLD when leader has moved on)
+    # stop only after no newer breadcrumbs for this long AND final goal
+    # reached [s]. Must be > tb3 max catch-up time (1.2m / 0.22m/s ≈ 6s
+    # from start). 12s gives safe margin for slow startup and obstacles.
+    breadcrumb_timeout:          12.0
 
 costmap_generator:
   ros__parameters:

@@ -134,6 +134,7 @@ class PursuitController:
         self._stationary_since:  Optional[int]  = None   # wall-clock ns
         self._emergency_since:   Optional[int]  = None   # wall-clock ns
         self._prev_emergency:    bool            = False
+        self._state_for_timer_reset: FollowerState = FollowerState.TRACKING
         self._last_newest_time_ns: int          = 0      # ns since epoch
 
     # ── Breadcrumb-freshness update (called from _path_cb) ────────────────────
@@ -179,8 +180,11 @@ class PursuitController:
             scan_for_safety = None
         else:
             rmin = scan.range_min if scan.range_min > 0 else 0.12
+            filtered_ranges = self.safety.filter_predecessor_returns(
+                list(scan.ranges), scan.angle_min, scan.angle_increment,
+            )
             cm = build_costmap(
-                scan.ranges, scan.angle_min, scan.angle_increment,
+                filtered_ranges, scan.angle_min, scan.angle_increment,
                 rmin, scan.range_max,
                 self.costmap_size, self.costmap_resolution,
             )
@@ -211,15 +215,21 @@ class PursuitController:
 
         # ── Pure Pursuit ──────────────────────────────────────────────────────
         # 1. Closest path point (O(1) walk starting near last closest).
-        start_idx   = min(self._last_closest_idx, goal_idx)
-        closest_idx = start_idx
-        best        = float('inf')
+        # Search from up to 20 poses BEFORE last known closest to recover
+        # from lateral drift without re-scanning the entire path.
+        search_start = max(0, self._last_closest_idx - 20)
+        start_idx    = min(search_start, goal_idx)
+        closest_idx  = start_idx
+        best         = float('inf')
         for i in range(start_idx, goal_idx + 1):
             d = math.hypot(path[i][0] - rx, path[i][1] - ry)
             if d < best:
                 best = d
                 closest_idx = i
-            elif d > best + 0.5:
+            elif d > best + 0.10:
+                # Early-break only when distance is clearly growing.
+                # 0.10m threshold matches path_resolution*5 — tight enough
+                # to catch the genuine minimum without missing it on curves.
                 break
         self._last_closest_idx = closest_idx
 
@@ -253,14 +263,22 @@ class PursuitController:
                 pursuit_linear  = 0.0
                 pursuit_angular = self.kp_angular * math.atan2(gy_local, -gx_local + 1e-6)
             else:
-                creep           = self.kp_linear * dist_to_goal * 0.3
-                pursuit_linear  = self.kp_linear * max(forward_drive, creep)
-                curvature       = 2.0 * ly / (Ld * Ld)
-                pursuit_angular = pursuit_linear * curvature
+                creep          = self.kp_linear * dist_to_goal * 0.3
+                pursuit_linear = self.kp_linear * max(forward_drive, creep)
+
                 if abs(alpha) > 0.8:
+                    # Large heading error: prioritize turning, slow forward motion.
+                    # Apply ONE speed reduction (not two). cos(alpha) alone at
+                    # alpha=0.8 gives 0.70x, at alpha=1.2 gives 0.36x — enough
+                    # to slow for sharp turns without making the follower crawl.
                     pursuit_angular = self.kp_angular * alpha
-                    pursuit_linear *= 0.3
-                pursuit_linear *= max(0.3, math.cos(alpha))
+                    pursuit_linear *= max(0.35, math.cos(alpha))
+                else:
+                    # Normal tracking: smooth arc via Pure Pursuit curvature.
+                    curvature       = 2.0 * ly / (Ld * Ld)
+                    pursuit_angular = pursuit_linear * curvature
+                    # Mild speed scaling for small heading errors.
+                    pursuit_linear *= max(0.7, math.cos(alpha))
 
         # ── State-machine inputs ──────────────────────────────────────────────
         blocked              = is_goal_blocked(cm, gx_local, gy_local)
@@ -268,10 +286,11 @@ class PursuitController:
         both_blocked         = (left_free == 0 and right_free == 0)
 
         dist_to_goal_world   = math.hypot(goal[0] - rx, goal[1] - ry)
+        dist_to_path_end     = math.hypot(path[-1][0] - rx, path[-1][1] - ry)
         elapsed_s            = (now_ns - self._last_newest_time_ns) / 1e9
         hold                 = should_hold(
             elapsed_s, self.breadcrumb_timeout,
-            dist_to_goal_world, self.goal_tol,
+            dist_to_path_end, self.goal_tol,
         )
         has_unreached        = dist_to_goal_world > self.goal_tol
 
@@ -318,6 +337,15 @@ class PursuitController:
                 self.max_lin, self.max_ang,
                 self.detour_forward_min_vel,
             )
+            # Bias detour angular toward the goal when goal is more than 45°
+            # off-axis. Prevents DETOUR from turning away from the leader when
+            # costmap free space happens to be on the wrong side.
+            goal_bearing = math.atan2(gy_local, gx_local)
+            if abs(goal_bearing) > math.radians(45):
+                goal_sign   = 1.0 if goal_bearing > 0 else -1.0
+                detour_sign = 1.0 if base_angular  > 0 else -1.0
+                if goal_sign != detour_sign:
+                    base_angular = -base_angular
         else:  # TRACKING
             base_linear, base_angular = pursuit_linear, pursuit_angular
 
@@ -339,9 +367,11 @@ class PursuitController:
 
         # ── Emergency-duration timer (updated with the real flag) ─────────────
         if safety_emergency_now:
-            if not self._prev_emergency or self._emergency_since is None:
+            if self._emergency_since is None:
                 self._emergency_since = now_ns
-        else:
+        elif self._state_for_timer_reset == FollowerState.TRACKING:
+            # Only reset when cleanly back in TRACKING, not on momentary
+            # clears during SEARCH or DETOUR rotation.
             self._emergency_since = None
         self._prev_emergency = safety_emergency_now
 
@@ -351,12 +381,16 @@ class PursuitController:
         # it applies slew limiting so the timer reflects the actual output.
         self._pending_linear_for_stationary = linear_x
 
+        self._state_for_timer_reset = state
         return linear_x, angular_z, safety_emergency_now
 
     def update_stationary_timer(self, actual_linear: float, now_ns: int) -> None:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""
         if abs(actual_linear) < 1e-6:
+            # Robot is stopped for any reason (emergency, detour suppressed,
+            # search) — start timer on first stop tick, keep accumulating.
             if self._stationary_since is None:
                 self._stationary_since = now_ns
         else:
+            # Only clear when the robot is genuinely moving.
             self._stationary_since = None

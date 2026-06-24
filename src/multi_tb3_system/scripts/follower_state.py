@@ -203,12 +203,16 @@ def build_detour_command(
     Validates: Requirements 2.2, 2.3, 2.5, 2.6
     """
     angular = select_detour_bias(cm, max_angular)
+    # Enforce a minimum turn magnitude. A weak bias (|angular| < 0.5 rad/s)
+    # at 0.10 m/s forward speed does not arc away from the obstacle fast
+    # enough within the costmap window — robot creeps along the wall instead.
+    min_detour_angular = min(0.5, max_angular)
     if angular == 0.0:
-        # classify_state() routes fully blocked costmaps to HOLD/SEARCH before
-        # this builder is called. A zero bias here therefore means the free
-        # space is tied; pick a deterministic turn so DETOUR does not degrade
-        # into an accidental hold.
-        angular = min(0.5, max_angular)
+        angular = min_detour_angular
+    elif 0.0 < angular < min_detour_angular:
+        angular = min_detour_angular
+    elif -min_detour_angular < angular < 0.0:
+        angular = -min_detour_angular
     linear = max(detour_forward_min_vel, pursuit_linear)
     if linear < 0.0:
         linear = 0.0
@@ -220,21 +224,18 @@ def build_detour_command(
 def build_search_command(
     search_angular_velocity: float,
     max_angular: float,
+    reverse_speed: float = -0.08,
 ) -> tuple[float, float]:
-    """Compute the base ``(linear, angular)`` command for the SEARCH state.
+    """Reverse-arc escape: small reverse linear + rotation.
 
-    SEARCH is a rotate-in-place sweep used when the follower has
-    deadlocked on a stationary or emergency stop but still has
-    breadcrumbs to chase. The linear component is always ``0.0``; the
-    angular component is the configured ``search_angular_velocity``
-    clamped to ``[-max_angular, +max_angular]`` so the rotation respects
-    the global velocity limit.
-
-    Validates: Requirements 3.4
+    Backing up while turning moves the robot away from convex
+    obstacles (pillars) so it can clear them and re-acquire the path.
+    The SafetyController does not suppress reverse (negative linear)
+    motion, so this always executes regardless of what is in front.
     """
     a = search_angular_velocity
     if a > max_angular:
         a = max_angular
     if a < -max_angular:
         a = -max_angular
-    return (0.0, a)
+    return (reverse_speed, a)

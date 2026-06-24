@@ -35,9 +35,9 @@ from typing import List, Tuple
 
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-EMERGENCY_HALF_ANGLE_DEG = 45.0    # Check ±45° in front for emergency stop
-STEER_HALF_ANGLE_DEG     = 60.0    # Check ±60° for steering bias
-STEER_INFLUENCE_RANGE    = 1.0     # Obstacles within this range affect steering (> convoy_spacing=0.5m)
+EMERGENCY_HALF_ANGLE_DEG = 45.0    # unchanged — cone angle stays the same
+STEER_HALF_ANGLE_DEG     = 60.0    # unchanged — cone angle stays the same
+STEER_INFLUENCE_RANGE    = 0.5     # reduced 50%: only steer-bias obstacles within 0.5m
 
 
 class SafetyController:
@@ -53,6 +53,7 @@ class SafetyController:
         safe_distance: float = 0.35,
         max_linear_vel: float = 0.22,
         max_angular_vel: float = 1.0,
+        predecessor_gap: float = 0.0,
     ) -> None:
         """
         Initialize the safety controller.
@@ -69,6 +70,7 @@ class SafetyController:
         self.safe_distance   = safe_distance
         self.max_linear_vel  = max_linear_vel
         self.max_angular_vel = max_angular_vel
+        self.predecessor_gap = predecessor_gap
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
@@ -102,6 +104,14 @@ class SafetyController:
                 continue
             angle = angle_min + i * angle_increment
             angle = math.atan2(math.sin(angle), math.cos(angle))  # wrap to (-π, π]
+
+            PREDECESSOR_HALF_ANGLE = math.radians(15.0)
+            if (self.predecessor_gap > 0.0
+                    and abs(angle) <= PREDECESSOR_HALF_ANGLE):
+                lo = self.predecessor_gap * 0.3
+                hi = self.predecessor_gap * 1.2
+                if lo <= r <= hi:
+                    continue
 
             # ─── Emergency cone (±45°) ────────────────────────────────────
             if abs(angle) <= emergency_half and r < self.safe_distance:
@@ -235,6 +245,26 @@ class SafetyController:
             if abs(angle) <= emergency_half and r < self.safe_distance:
                 return True
         return False
+
+    def filter_predecessor_returns(
+        self,
+        ranges: list,
+        angle_min: float,
+        angle_increment: float,
+    ) -> list:
+        """Return a copy of ranges with predecessor returns set to inf."""
+        if self.predecessor_gap <= 0.0:
+            return ranges
+        PREDECESSOR_HALF_ANGLE = math.radians(15.0)
+        lo = self.predecessor_gap * 0.3
+        hi = self.predecessor_gap * 1.2
+        filtered = list(ranges)
+        for i, r in enumerate(filtered):
+            angle = angle_min + i * angle_increment
+            angle = math.atan2(math.sin(angle), math.cos(angle))
+            if abs(angle) <= PREDECESSOR_HALF_ANGLE and lo <= r <= hi:
+                filtered[i] = float('inf')
+        return filtered
 
     # ──────────────────────────────────────────────────────────────────────────
 

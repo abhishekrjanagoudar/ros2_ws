@@ -95,7 +95,8 @@ class FollowerNode(Node):
         self.declare_parameter('kp_angular', 1.5)
         self.declare_parameter('max_linear_velocity', 0.22)
         self.declare_parameter('max_angular_velocity', 1.0)
-        self.declare_parameter('safe_distance', 0.35)  # must be strictly < convoy_spacing (0.5 m) so the robot ahead at the nominal gap does not trigger an emergency stop
+        self.declare_parameter('safe_distance', 0.15)  # must be strictly < convoy_spacing (0.5 m) so the robot ahead at the nominal gap does not trigger an emergency stop
+        self.declare_parameter('predecessor_gap', 0.6)
         self.declare_parameter('control_frequency', 20.0)  # Hz — must match follower_params.yaml
         self.declare_parameter('max_linear_accel', 1.0)
         self.declare_parameter('max_angular_accel', 3.0)
@@ -144,6 +145,7 @@ class FollowerNode(Node):
             safe_distance=gp('safe_distance'),
             max_linear_vel=self.max_lin,
             max_angular_vel=self.max_ang,
+            predecessor_gap=float(gp('predecessor_gap')),
         )
 
         self._controller = PursuitController(
