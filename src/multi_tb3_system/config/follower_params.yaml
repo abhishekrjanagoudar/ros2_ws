@@ -1,20 +1,56 @@
-# follower_node.py parameters — distances in m, velocities in m/s, angles in deg
-#
-# leader_ns and odom_lidar_divergence_m are set at launch time by
-# followers.launch.py. Defaults here are fallback-only.
+# follower_node.py parameters
 
 follower_node:
   ros__parameters:
 
-    target_distance:      1.0    # maintain this gap from robot ahead
-    safe_distance:        0.4    # hard-stop if anything closer than this
+    leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
 
-    kp_linear:            0.8    # linear_vel  = kp_linear  * (dist - target_distance)
-    kp_angular:           2.0    # angular_vel = kp_angular * angle_to_target
+    # Convoy spacing
+    convoy_spacing:       0.6     # gap per convoy slot [m] (tb2=1x=0.6m, tb3=2x=1.2m)
+    goal_tolerance:       0.12    # stop when within this distance of goal [m] (realistic for 20 Hz + slew limits)
 
-    max_linear_velocity:  0.22   # TB3 Burger hardware limit
+    # Pure Pursuit
+    lookahead_distance:   0.25    # lookahead point distance along the path [m] — must be < gap/2 (gap = convoy_spacing × (slot-1))
+    kp_linear:            0.6     # forward speed gain on spacing error
+    kp_angular:           1.8     # heading gain (large-misalignment recovery)
+
+    # Limits
+    max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
+    # LiDAR hard-stop distance (SafetyController) [m]
+    safe_distance:        0.15
 
-    # leader_ns: namespace of the convoy orchestrator (always tb1).
-    # Overridden at launch time by followers.launch.py.
-    leader_ns: 'tb1'
+    # Convoy predecessor filtering
+    predecessor_gap:      0.6     # must equal convoy_spacing [m]
+
+
+    # Control loop / smoothing
+    control_frequency:    20.0    # Hz — cmd_vel publish / control rate
+    max_linear_accel:     2.0     # m/s^2 — command slew limit (faster ramp-up to match leader acceleration)
+    max_angular_accel:    3.0     # rad/s^2 — command slew limit
+
+    # Local costmap (LiDAR-derived occupancy grid)
+    costmap_size:                3.0   # span of square local costmap [m]
+    costmap_resolution:          0.05  # cell size [m] (3.0/0.05 = 60x60 = 3600 cells)
+    costmap_publish_rate:        10.0  # Hz (>=5 Hz) — informational; in-process build runs each control cycle
+    costmap_stale_timeout:       1.0   # clear costmap if no new scan within this many seconds
+
+    # Obstacle-avoidance state machine
+    detour_forward_min_vel:      0.10  # forward creep maintained during DETOUR [m/s] (more assertive to clear narrow gaps)
+    stationary_deadlock_timeout: 3.5   # escalate to SEARCH after this many continuous stationary seconds [s] (give DETOUR time to work)
+    emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
+    search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
+
+    # Persistent leader tracking
+    breadcrumb_timeout:          12.0
+
+costmap_generator:
+  ros__parameters:
+
+    # Keep these aligned with follower_node's in-process costmap settings.
+    costmap_size:                3.0
+    costmap_resolution:          0.05
+    costmap_publish_rate:        10.0
+    costmap_stale_timeout:       1.0
+    costmap_frame:               ''
+    range_min_override:          0.0

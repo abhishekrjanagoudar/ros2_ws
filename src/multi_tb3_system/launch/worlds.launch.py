@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """
 worlds.launch.py — resolves world name → absolute .world path, starts Gazebo.
-
-Args:
-  world: 'empty' (default) | 'pillars' | 'office'
-  gz   : 'true' | 'false' (default)
-
-The 'office' world (CPR Office environment) uses a custom mesh model located
-in config/cpr_office/models/. GZ_SIM_RESOURCE_PATH is extended automatically
-so Gazebo can resolve the model://cpr_office/... URIs in the world file.
 """
 
 import os
@@ -26,8 +18,6 @@ from launch.substitutions import LaunchConfiguration
 
 
 # World registry: name → (world file path, extra model dir or None)
-# Paths are relative to the package share directory.
-# extra_models: directory to append to GZ_SIM_RESOURCE_PATH, or None.
 _WORLDS = {
     'empty':   ('worlds/empty.world',   None),
     'pillars': ('worlds/pillars.world', None),
@@ -53,7 +43,6 @@ def _launch_setup(context, *args, **kwargs):
     actions = []
 
     # For worlds with custom models, extend GZ_SIM_RESOURCE_PATH so Gazebo
-    # can resolve model:// URIs (e.g. model://cpr_office/meshes/office.dae).
     if rel_models:
         actions.append(AppendEnvironmentVariable(
             'GZ_SIM_RESOURCE_PATH',

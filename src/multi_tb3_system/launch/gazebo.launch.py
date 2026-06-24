@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 """
 gazebo.launch.py — Gazebo Sim lifecycle (server + optional GUI + clock bridge).
-
-GUI uses ExecuteProcess to inject GPU-accelerated rendering env vars for WSL2.
-Uses GLX path (XWayland → WSLg → D3D12 → NVIDIA GPU) instead of EGL/software.
-GUI crash does NOT kill the server (on_exit_shutdown omitted for GUI).
-
-Args:
-  world_file  : absolute path to .world SDF
-  gz          : 'true' | 'false' (default) — show Gazebo GUI
-  use_sim_time: passed through, not used here directly
 """
 
 import os
@@ -41,9 +32,6 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     # GUI client — WSL2 GPU path: GLX via XWayland → WSLg compositor → D3D12 → NVIDIA
-    # DO NOT set LIBGL_ALWAYS_SOFTWARE or llvmpipe here — those force pure CPU rendering.
-    # OGRE2 must use GLX (not EGL headless) because WSL2 has no /dev/dri render nodes;
-    # EGL falls back to EGL_MESA_device_software (software rasterizer on CPU).
     gz_client = ExecuteProcess(
         cmd=['gz', 'sim', '-g', '-v2', '--force-version', '8'],
         additional_env={

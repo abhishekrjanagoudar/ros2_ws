@@ -1,18 +1,6 @@
 #!/usr/bin/env python3
 """
-followers.launch.py — starts one follower_node.py per follower robot.
-
-Nodes start AFTER their robot has spawned + an init buffer to let Gazebo
-and the bridge settle before cmd_vel flows.
-  tb2: spawns at 3s → follower starts at 5s
-  tb3: spawns at 6s → follower starts at 8s
-
-Spawn/start timing comes from ``multi_tb3_system.launch_common`` so it stays
-in lock-step with spawn_robots.launch.py.
-
-Args:
-  nBurger     : follower count 1–2 (default 2)
-  use_sim_time: 'true' (default) | 'false'
+followers.launch.py — Path-Based Convoy.
 """
 
 import os
@@ -23,34 +11,76 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from multi_tb3_system.launch_common import clamp_followers, follower_start_delay
+from multi_tb3_system.launch_common import (
+    SPAWN_Y,
+    clamp_followers,
+    spawn_x,
+)
+
+_LEADER_NS = 'tb1'
 
 
 def _launch_setup(context, *args, **kwargs):
-    n_burgers    = clamp_followers(int(LaunchConfiguration('nBurger').perform(context)))
-    use_sim_time = LaunchConfiguration('use_sim_time').perform(context) == 'true'
+    n_burgers      = clamp_followers(int(LaunchConfiguration('nBurger').perform(context)))
+    use_sim_time   = LaunchConfiguration('use_sim_time').perform(context) == 'true'
+    convoy_spacing = float(LaunchConfiguration('convoy_spacing').perform(context))
+    enable_viz     = LaunchConfiguration('rviz').perform(context) == 'true'
 
     pkg_share   = get_package_share_directory('multi_tb3_system')
     params_file = os.path.join(pkg_share, 'config', 'follower_params.yaml')
 
     actions = []
-    
-    # Start the convoy path publisher on the leader (tb1)
-    convoy_pub_node = Node(
+
+    #  Startup timeline (all times relative to when this launch file is invoked,
+
+    CONVOY_PUB_START  = 0.0    # leader path recording — start immediately
+    COSTMAP_START     = 0.38   # per-robot costmap generator — after scan is live
+    FOLLOWER1_START   = 1.00   # tb2 follower node
+    FOLLOWER2_START   = 1.25   # tb3 follower node — 0.5s after tb2
+
+    # Leader trajectory publisher (tb1)
+    convoy_pub = Node(
         package='multi_tb3_system',
         executable='convoy_publisher.py',
         name='convoy_publisher',
-        namespace='tb1',
-        parameters=[{'use_sim_time': use_sim_time}],
+        namespace=_LEADER_NS,
+        parameters=[{
+            'use_sim_time':   use_sim_time,
+            'path_frame':     'world',
+            'spawn_offset_x': spawn_x(1),
+            'spawn_offset_y': SPAWN_Y,
+        }],
         output='screen',
         emulate_tty=True,
     )
-    # The leader spawns at t=0, so publisher can start right away (or with slight delay)
-    actions.append(TimerAction(period=2.0, actions=[convoy_pub_node]))
+    actions.append(TimerAction(period=CONVOY_PUB_START, actions=[convoy_pub]))
 
-    for i in range(2, n_burgers + 2):   # tb2, tb3, ...
-        ns        = f'tb{i}'
-        leader_ns = 'tb1'               # In Convoy architecture, everyone follows tb1's path
+    # Per-robot costmap_generator (tb1, tb2, tb3, ...)
+    for i in range(1, n_burgers + 2):
+        ns = f'tb{i}'
+        cg_node = Node(
+            package='multi_tb3_system',
+            executable='costmap_generator.py',
+            name='costmap_generator',
+            namespace=ns,
+            parameters=[
+                params_file,
+                {
+                    'use_sim_time':       use_sim_time,
+                    'enable_costmap_viz': enable_viz,
+                },
+            ],
+            output='screen',
+            emulate_tty=True,
+        )
+        actions.append(TimerAction(period=COSTMAP_START, actions=[cg_node]))
+
+    # Pure-Pursuit followers (tb2, tb3, ...)
+    follower_delays = {2: FOLLOWER1_START, 3: FOLLOWER2_START}
+
+    for i in range(2, n_burgers + 2):
+        ns = f'tb{i}'
+        delay = follower_delays.get(i, FOLLOWER1_START + (i - 2) * 2.0)
         node = Node(
             package='multi_tb3_system',
             executable='follower_node.py',
@@ -59,23 +89,33 @@ def _launch_setup(context, *args, **kwargs):
             parameters=[
                 params_file,
                 {
-                    'use_sim_time': use_sim_time,
-                    'leader_ns':    leader_ns,   # Convoy path is /tb1/convoy_path
+                    'use_sim_time':   use_sim_time,
+                    'leader_ns':      _LEADER_NS,
+                    'convoy_spacing': convoy_spacing,
+                    'spawn_offset_x': spawn_x(i),
+                    'spawn_offset_y': SPAWN_Y,
                 },
+            ],
+            remappings=[
+                ('convoy_path', f'/{_LEADER_NS}/convoy_path'),
             ],
             output='screen',
             emulate_tty=True,
         )
-        actions.append(TimerAction(period=follower_start_delay(i), actions=[node]))
+        actions.append(TimerAction(period=delay, actions=[node]))
 
     return actions
 
 
 def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
-        DeclareLaunchArgument('nBurger',      default_value='2',
-                              description='Follower count (1–2).'),
-        DeclareLaunchArgument('use_sim_time', default_value='true',
+        DeclareLaunchArgument('nBurger',        default_value='2',
+                              description='Follower count (1-2).'),
+        DeclareLaunchArgument('use_sim_time',   default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
+        DeclareLaunchArgument('convoy_spacing', default_value='0.6',
+                              description='Gap per convoy slot in metres (must match SPAWN_X_STEP=0.6m).'),
+        DeclareLaunchArgument('rviz',           default_value='false',
+                              description="'true' = enable costmap_viz publishing for RViz."),
         OpaqueFunction(function=_launch_setup),
     ])

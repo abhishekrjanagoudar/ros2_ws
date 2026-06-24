@@ -41,19 +41,16 @@
 
   <!-- ── Robot description publishing ────────────────────────────────────── -->
   <depend>robot_state_publisher</depend>
-  <depend>joint_state_publisher</depend>
 
   <!-- ── Visualization ────────────────────────────────────────────────────── -->
   <depend>rviz2</depend>
 
-  <!-- ── SLAM / Mapping ───────────────────────────────────────────────────── -->
-  <depend>slam_toolbox</depend>
-  <depend>nav2_map_server</depend>
-  <depend>nav2_lifecycle_manager</depend>
+
 
   <!-- ── Testing ──────────────────────────────────────────────────────────── -->
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>python3-hypothesis</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
