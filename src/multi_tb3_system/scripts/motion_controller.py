@@ -26,6 +26,7 @@ from follower_state import (
 )
 from safety_controller import SafetyController
 from local_planner import LocalPlanner
+from multi_tb3_system.perception.laser_processor import process_scan
 
 
 # Geometry helpers
@@ -222,6 +223,35 @@ Compute one control cycle.
         # 3. Goal in robot-local frame (blocking test + speed scaling).
         gx_local, gy_local = to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
         dist_to_goal        = math.hypot(gx_local, gy_local)
+
+        # LiDAR Target Tracking & Offset Correction
+        if scan_for_safety is not None and len(path) > 0:
+            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
+            rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
+            target_cluster, _ = process_scan(
+                ranges=list(scan_for_safety.ranges),
+                angle_min=scan_for_safety.angle_min,
+                angle_increment=scan_for_safety.angle_increment,
+                range_min=rmin,
+                front_half_angle_deg=90.0,  # Wide sector to catch leader on sharp turns
+                expected_local_pos=(expected_local_x, expected_local_y)
+            )
+
+            if target_cluster is not None and target_cluster.confidence > 0.0:
+                dx = target_cluster.centroid_x - expected_local_x
+                dy = target_cluster.centroid_y - expected_local_y
+                
+                # Apply confidence-weighted offset to shift the odometry goal and lookahead
+                # onto the physical reality of the leader's position.
+                gx_local += dx * target_cluster.confidence
+                gy_local += dy * target_cluster.confidence
+                lx += dx * target_cluster.confidence
+                ly += dy * target_cluster.confidence
+                
+                # Recompute derived tracking metrics with corrected points
+                dist_to_goal = math.hypot(gx_local, gy_local)
+                Ld     = max(math.hypot(lx, ly), 1e-3)
+                alpha  = math.atan2(ly, lx)
 
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:

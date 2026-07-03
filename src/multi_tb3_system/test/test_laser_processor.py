@@ -43,7 +43,8 @@ class TestLaserProcessor(unittest.TestCase):
         self.assertIsNotNone(target)
         
         # Centroid of the points x1, y1, x2, y2, x3, y3
-        self.assertIsInstance(target.centroid, tuple)
+        self.assertIsInstance(target.centroid_x, float)
+        self.assertIsInstance(target.centroid_y, float)
 
 if __name__ == '__main__':
     unittest.main()
