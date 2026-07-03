@@ -10,9 +10,9 @@ follower_node:
     goal_tolerance:       0.12    # stop when within this distance of goal [m] (realistic for 20 Hz + slew limits)
 
     # Pure Pursuit
-    lookahead_distance:   0.25    # lookahead point distance along the path [m] — must be < gap/2 (gap = convoy_spacing × (slot-1))
+    lookahead_distance:   0.5     # lookahead point distance along the path [m] — increased to prevent overshoot arcs
     kp_linear:            0.6     # forward speed gain on spacing error
-    kp_angular:           1.8     # heading gain (large-misalignment recovery)
+    kp_angular:           2.2     # heading gain (large-misalignment recovery)
 
     # Limits
     max_linear_velocity:  0.22    # TB3 Burger hardware limit

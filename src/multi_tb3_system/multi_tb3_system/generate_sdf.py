@@ -10,6 +10,13 @@ from ament_index_python.packages import get_package_share_directory
 
 logger = logging.getLogger(__name__)
 
+# Individual Wheel Calibrations
+WHEEL_CONFIGS = {
+    'tb1': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
+    'tb2': {'wheel_radius': 0.0320, 'wheel_separation': 0.1617},
+    'tb3': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
+}
+
 # Topic replacement map
 
 _TOPIC_PATCHES = [
@@ -96,6 +103,20 @@ Generate a namespaced TurtleBot3 Burger SDF for robot *ns*.
 
     # Inject DiffDrive topics if missing
     content = _inject_diffdrive_topics(content, ns)
+
+    # Inject individual wheel configurations
+    if ns in WHEEL_CONFIGS:
+        cfg = WHEEL_CONFIGS[ns]
+        content = re.sub(
+            r'<wheel_radius>[^<]*</wheel_radius>',
+            f'<wheel_radius>{cfg["wheel_radius"]}</wheel_radius>',
+            content
+        )
+        content = re.sub(
+            r'<wheel_separation>[^<]*</wheel_separation>',
+            f'<wheel_separation>{cfg["wheel_separation"]}</wheel_separation>',
+            content
+        )
 
     # Apply all remaining topic / frame patches
     for pattern, replacement in _TOPIC_PATCHES:

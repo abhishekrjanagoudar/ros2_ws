@@ -224,7 +224,7 @@ Compute one control cycle.
         gx_local, gy_local = to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
         dist_to_goal        = math.hypot(gx_local, gy_local)
 
-        # LiDAR Target Tracking & Offset Correction
+        # LiDAR Target Tracking
         if scan_for_safety is not None and len(path) > 0:
             expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
             rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
@@ -233,25 +233,25 @@ Compute one control cycle.
                 angle_min=scan_for_safety.angle_min,
                 angle_increment=scan_for_safety.angle_increment,
                 range_min=rmin,
-                front_half_angle_deg=90.0,  # Wide sector to catch leader on sharp turns
+                front_half_angle_deg=90.0,
                 expected_local_pos=(expected_local_x, expected_local_y)
             )
-
-            if target_cluster is not None and target_cluster.confidence > 0.0:
-                dx = target_cluster.centroid_x - expected_local_x
-                dy = target_cluster.centroid_y - expected_local_y
+            if target_cluster is not None and target_cluster.confidence > 0.5:
+                # Calculate physical error: where the leader actually is vs where Odometry thinks it is.
+                err_x = target_cluster.centroid_x - expected_local_x
+                err_y = target_cluster.centroid_y - expected_local_y
                 
-                # Apply confidence-weighted offset to shift the odometry goal and lookahead
-                # onto the physical reality of the leader's position.
-                gx_local += dx * target_cluster.confidence
-                gy_local += dy * target_cluster.confidence
-                lx += dx * target_cluster.confidence
-                ly += dy * target_cluster.confidence
+                # Apply an EMA filter to the offset to prevent violent swerves (alpha = 0.1)
+                if not hasattr(self, '_ema_err_x'):
+                    self._ema_err_x = err_x
+                    self._ema_err_y = err_y
+                else:
+                    self._ema_err_x = 0.1 * err_x + 0.9 * self._ema_err_x
+                    self._ema_err_y = 0.1 * err_y + 0.9 * self._ema_err_y
                 
-                # Recompute derived tracking metrics with corrected points
-                dist_to_goal = math.hypot(gx_local, gy_local)
-                Ld     = max(math.hypot(lx, ly), 1e-3)
-                alpha  = math.atan2(ly, lx)
+                # Shift the goal by the smoothed physical error to eliminate drift!
+                gx_local += self._ema_err_x
+                gy_local += self._ema_err_y
 
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:

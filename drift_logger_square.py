@@ -152,7 +152,7 @@ class DriftLogger(Node):
                     f'{g_x:.4f}', f'{g_y:.4f}', f'{g_yaw:.2f}',
                     f'{pos_drift:.4f}', f'{yaw_drift:.2f}'
                 ])
-                log_str += f'{m}: gz=({g_x:6.3f},{g_y:6.3f}) rviz=({o_x:6.3f},{o_y:6.3f}) drift={pos_drift:.3f}m | '
+                log_str += f'{m}: gz=({g_x:6.3f},{g_y:6.3f},{g_yaw:6.1f}°) rviz=({o_x:6.3f},{o_y:6.3f},{o_yaw:6.1f}°) drift={pos_drift:.3f}m | '
             else:
                 row.extend([''] * 8)
                 log_str += f'{m}: waiting... | '
