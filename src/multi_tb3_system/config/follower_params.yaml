@@ -18,7 +18,7 @@ follower_node:
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
     # LiDAR hard-stop distance (SafetyController) [m]
-    safe_distance:        0.15
+    safe_distance:        0.20    # Emergency stop distance - doubled from 0.15m for safety margin
 
     # Convoy predecessor filtering
     predecessor_gap:      0.6     # must equal convoy_spacing [m]
@@ -37,9 +37,12 @@ follower_node:
 
     # Obstacle-avoidance state machine
     detour_forward_min_vel:      0.10  # forward creep maintained during DETOUR [m/s] (more assertive to clear narrow gaps)
-    stationary_deadlock_timeout: 3.5   # escalate to SEARCH after this many continuous stationary seconds [s] (give DETOUR time to work)
+    stationary_deadlock_timeout: 2.0   # escalate to SEARCH after this many continuous stationary seconds [s] (quicker recovery from stuck states)
     emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
     search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
+
+    # Local planner (Nav2-like obstacle avoidance)
+    enable_local_planner:        true  # Use DWA-inspired local planner for DETOUR state (set false for simple biased turning)
 
     # Persistent leader tracking
     breadcrumb_timeout:          12.0

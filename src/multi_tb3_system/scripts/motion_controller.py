@@ -25,6 +25,7 @@ from follower_state import (
     build_search_command,
 )
 from safety_controller import SafetyController
+from local_planner import LocalPlanner
 
 
 # Geometry helpers
@@ -83,6 +84,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
         max_lin: float,
         max_ang: float,
         safety: SafetyController,
+        enable_local_planner: bool = True,
     ) -> None:
         self._gap                        = (convoy_slot - 1) * convoy_spacing
         self.lookahead_distance          = lookahead_distance
@@ -99,6 +101,25 @@ Stateful Pure Pursuit + state-machine convoy follower.
         self.max_lin                     = max_lin
         self.max_ang                     = max_ang
         self.safety                      = safety
+        self.enable_local_planner        = enable_local_planner
+
+        # Initialize local planner if enabled
+        self.local_planner: Optional[LocalPlanner] = None
+        if self.enable_local_planner:
+            self.local_planner = LocalPlanner(
+                max_linear_vel=max_lin,
+                max_angular_vel=max_ang,
+                max_linear_acc=2.0,
+                max_angular_acc=3.0,
+                velocity_samples=10,  # More samples for better paths
+                angular_samples=15,   # More angular samples for narrow gaps
+                predict_time=1.5,
+                robot_radius=0.25,
+                goal_weight=1.0,
+                velocity_weight=0.3,  # Favor moving forward
+                obstacle_weight=2.5,  # Strong obstacle avoidance
+                control_period=0.05,
+            )
 
         # Per-cycle mutable state
         self._last_closest_idx:  int            = 0
@@ -275,18 +296,31 @@ Compute one control cycle.
                 self.search_angular_velocity, self.max_ang,
             )
         elif state == FollowerState.DETOUR:
-            base_linear, base_angular = build_detour_command(
-                cm, pursuit_linear,
-                self.max_lin, self.max_ang,
-                self.detour_forward_min_vel,
-            )
-            # Bias detour angular toward the goal when goal is more than 45°
-            goal_bearing = math.atan2(gy_local, gx_local)
-            if abs(goal_bearing) > math.radians(45):
-                goal_sign   = 1.0 if goal_bearing > 0 else -1.0
-                detour_sign = 1.0 if base_angular  > 0 else -1.0
-                if goal_sign != detour_sign:
-                    base_angular = -base_angular
+            # Use local planner if enabled, otherwise use simple detour
+            if self.enable_local_planner and self.local_planner is not None:
+                # Update local planner's current velocity for dynamic window
+                self.local_planner.update_current_velocity(
+                    self._pending_linear_for_stationary if hasattr(self, '_pending_linear_for_stationary') else 0.0,
+                    0.0
+                )
+                # Compute velocity toward goal using local planner
+                base_linear, base_angular = self.local_planner.compute_velocity(
+                    gx_local, gy_local, cm, ryaw
+                )
+            else:
+                # Simple detour: biased turning
+                base_linear, base_angular = build_detour_command(
+                    cm, pursuit_linear,
+                    self.max_lin, self.max_ang,
+                    self.detour_forward_min_vel,
+                )
+                # Bias detour angular toward the goal when goal is more than 45°
+                goal_bearing = math.atan2(gy_local, gx_local)
+                if abs(goal_bearing) > math.radians(45):
+                    goal_sign   = 1.0 if goal_bearing > 0 else -1.0
+                    detour_sign = 1.0 if base_angular  > 0 else -1.0
+                    if goal_sign != detour_sign:
+                        base_angular = -base_angular
         else:  # TRACKING
             base_linear, base_angular = pursuit_linear, pursuit_angular
 

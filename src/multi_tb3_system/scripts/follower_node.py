@@ -36,7 +36,7 @@ class FollowerNode(Node):
         self.declare_parameter('kp_angular', 1.5)
         self.declare_parameter('max_linear_velocity', 0.22)
         self.declare_parameter('max_angular_velocity', 1.0)
-        self.declare_parameter('safe_distance', 0.15)  # must be strictly < convoy_spacing (0.5 m) so the robot ahead at the nominal gap does not trigger an emergency stop
+        self.declare_parameter('safe_distance', 0.20)  # Emergency stop distance - must be < convoy_spacing (0.6m) to allow normal following
         self.declare_parameter('predecessor_gap', 0.6)
         self.declare_parameter('control_frequency', 20.0)  # Hz — must match follower_params.yaml
         self.declare_parameter('max_linear_accel', 1.0)
@@ -54,6 +54,7 @@ class FollowerNode(Node):
         self.declare_parameter('emergency_recovery_timeout', 0.5)
         self.declare_parameter('search_angular_velocity', 0.6)
         self.declare_parameter('breadcrumb_timeout', 10.0)
+        self.declare_parameter('enable_local_planner', True)
 
         gp = lambda n: self.get_parameter(n).value
 
@@ -106,6 +107,7 @@ class FollowerNode(Node):
             max_lin=self.max_lin,
             max_ang=self.max_ang,
             safety=safety,
+            enable_local_planner=bool(gp('enable_local_planner')),
         )
 
         # Message caches (written by callbacks, read by control loop)
