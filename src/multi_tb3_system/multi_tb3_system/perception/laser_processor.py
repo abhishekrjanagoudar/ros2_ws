@@ -183,6 +183,7 @@ def process_scan(
     max_cluster_size: int = 40,
     last_target_pos: Optional[Tuple[float, float]] = None,
     expected_local_pos: Optional[Tuple[float, float]] = None,
+    lock_radius: float = 0.4,
 ) -> Tuple[Optional[Cluster], List[Cluster]]:
     """
     Full pipeline: raw LaserScan → (target_cluster, all_clusters).
@@ -194,6 +195,7 @@ def process_scan(
     target      = select_target_cluster(
         clusters, 
         last_target_pos=last_target_pos, 
-        expected_local_pos=expected_local_pos
+        expected_local_pos=expected_local_pos,
+        lock_radius=lock_radius
     )
     return target, clusters

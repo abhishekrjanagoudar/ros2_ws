@@ -38,22 +38,26 @@ def _launch_setup(context, *args, **kwargs):
     FOLLOWER1_START   = 1.00   # tb2 follower node
     FOLLOWER2_START   = 1.25   # tb3 follower node — 0.5s after tb2
 
-    # Leader trajectory publisher (tb1)
-    convoy_pub = Node(
-        package='multi_tb3_system',
-        executable='convoy_publisher.py',
-        name='convoy_publisher',
-        namespace=_LEADER_NS,
-        parameters=[{
-            'use_sim_time':   use_sim_time,
-            'path_frame':     'world',
-            'spawn_offset_x': spawn_x(1),
-            'spawn_offset_y': SPAWN_Y,
-        }],
-        output='screen',
-        emulate_tty=True,
-    )
-    actions.append(TimerAction(period=CONVOY_PUB_START, actions=[convoy_pub]))
+    # Path publishers for all predecessors (tb1 ... tb[N])
+    # tb1 drops breadcrumbs for tb2. tb2 drops breadcrumbs for tb3, etc.
+    for i in range(1, n_burgers + 1):
+        ns = f'tb{i}'
+        convoy_pub = Node(
+            package='multi_tb3_system',
+            executable='convoy_publisher.py',
+            name='convoy_publisher',
+            namespace=ns,
+            parameters=[{
+                'use_sim_time':   use_sim_time,
+                'path_frame':     'world',
+                'spawn_offset_x': spawn_x(i),
+                'spawn_offset_y': SPAWN_Y,
+            }],
+            output='screen',
+            emulate_tty=True,
+        )
+        delay = CONVOY_PUB_START if i == 1 else FOLLOWER1_START + (i - 2) * 2.0
+        actions.append(TimerAction(period=delay, actions=[convoy_pub]))
 
     # Per-robot costmap_generator (tb1, tb2, tb3, ...)
     for i in range(1, n_burgers + 2):
@@ -80,6 +84,8 @@ def _launch_setup(context, *args, **kwargs):
 
     for i in range(2, n_burgers + 2):
         ns = f'tb{i}'
+        leader_ns = f'tb{i-1}'  # Daisy-chain: tb[i] tracks tb[i-1]
+        
         delay = follower_delays.get(i, FOLLOWER1_START + (i - 2) * 2.0)
         node = Node(
             package='multi_tb3_system',
@@ -90,14 +96,14 @@ def _launch_setup(context, *args, **kwargs):
                 params_file,
                 {
                     'use_sim_time':   use_sim_time,
-                    'leader_ns':      _LEADER_NS,
+                    'leader_ns':      leader_ns,
                     'convoy_spacing': convoy_spacing,
                     'spawn_offset_x': spawn_x(i),
                     'spawn_offset_y': SPAWN_Y,
                 },
             ],
             remappings=[
-                ('convoy_path', f'/{_LEADER_NS}/convoy_path'),
+                ('convoy_path', f'/{leader_ns}/convoy_path'),
             ],
             output='screen',
             emulate_tty=True,

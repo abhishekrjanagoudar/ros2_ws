@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 # Individual Wheel Calibrations
 WHEEL_CONFIGS = {
-    'tb1': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
-    'tb2': {'wheel_radius': 0.0320, 'wheel_separation': 0.1617},
-    'tb3': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
+    'tb1': {'wheel_radius': 0.0314, 'wheel_separation': 0.1822},
+    'tb2': {'wheel_radius': 0.0320, 'wheel_separation': 0.1642},
+    'tb3': {'wheel_radius': 0.0320, 'wheel_separation': 0.1642},
 }
 
 # Topic replacement map

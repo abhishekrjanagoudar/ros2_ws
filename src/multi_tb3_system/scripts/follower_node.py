@@ -142,9 +142,9 @@ class FollowerNode(Node):
                                  self._scan_cb, qos)
         self.create_timer(self._dt, self._control_loop)
 
-        gap = (slot - 1) * float(gp('convoy_spacing'))
+        gap = float(gp('convoy_spacing'))
         self.get_logger().info(
-            f"Path-follower tb{slot} | gap={gap:.2f}m | "
+            f"Daisy-chain follower tb{slot} | gap={gap:.2f}m | "
             f"lookahead={gp('lookahead_distance'):.2f}m | "
             f"control={self.control_frequency:.0f}Hz"
         )

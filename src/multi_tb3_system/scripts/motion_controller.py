@@ -87,7 +87,12 @@ Stateful Pure Pursuit + state-machine convoy follower.
         safety: SafetyController,
         enable_local_planner: bool = True,
     ) -> None:
-        self._gap                        = (convoy_slot - 1) * convoy_spacing
+        self._slot = convoy_slot
+        
+        # Daisy-chain tracking: Every follower tracks its direct predecessor's path.
+        # Therefore, the gap is ALWAYS exactly `convoy_spacing` from the end of the path.
+        self._gap = convoy_spacing
+
         self.lookahead_distance          = lookahead_distance
         self.kp_linear                   = kp_linear
         self.kp_angular                  = kp_angular
@@ -234,9 +239,10 @@ Compute one control cycle.
                 angle_increment=scan_for_safety.angle_increment,
                 range_min=rmin,
                 front_half_angle_deg=90.0,
-                expected_local_pos=(expected_local_x, expected_local_y)
+                expected_local_pos=(expected_local_x, expected_local_y),
+                lock_radius=2.0
             )
-            if target_cluster is not None and target_cluster.confidence > 0.5:
+            if target_cluster is not None and target_cluster.confidence >= 0.2:
                 # Calculate physical error: where the leader actually is vs where Odometry thinks it is.
                 err_x = target_cluster.centroid_x - expected_local_x
                 err_y = target_cluster.centroid_y - expected_local_y
