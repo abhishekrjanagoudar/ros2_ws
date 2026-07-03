@@ -7,9 +7,9 @@ import math
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
+import tf2_ros
 
 
 class ConvoyPublisher(Node):
@@ -18,64 +18,74 @@ class ConvoyPublisher(Node):
 
         self.declare_parameter('max_path_poses', 5000)
         self.declare_parameter('path_resolution', 0.01)
-        self.declare_parameter('path_frame', 'world')
-        self.declare_parameter('spawn_offset_x', 0.0)
-        self.declare_parameter('spawn_offset_y', 0.0)
+        self.declare_parameter('path_frame', 'map')
+        self.declare_parameter('base_frame', 'base_footprint')
 
         self.max_poses  = self.get_parameter('max_path_poses').value
         self.resolution = self.get_parameter('path_resolution').value
         self.frame      = self.get_parameter('path_frame').value
-        self.off_x      = self.get_parameter('spawn_offset_x').value
-        self.off_y      = self.get_parameter('spawn_offset_y').value
+        self.base_frame = self.get_parameter('base_frame').value
+        
+        # Resolve full base frame (e.g. 'tb1/base_footprint')
+        ns = self.get_namespace().strip('/')
+        self.full_base_frame = f"{ns}/{self.base_frame}" if ns else self.base_frame
 
         self.path_pub = self.create_publisher(Path, 'convoy_path', 10)
 
-        _sensor_qos = QoSProfile(
-            depth=10,
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
-        )
-        self.odom_sub = self.create_subscription(
-            Odometry, 'odom', self.odom_callback, _sensor_qos,
-        )
+        # TF2 setup
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.path_msg = Path()
         self.path_msg.header.frame_id = self.frame
 
-        # Publish path at 50 Hz to match follower control loops
-        self.timer = self.create_timer(0.02, self.publish_path)
+        # Publish path and lookup TF at 50 Hz
+        self.timer = self.create_timer(0.02, self.timer_callback)
 
         self.get_logger().info(
-            f"ConvoyPublisher | frame={self.frame} | "
-            f"offset=({self.off_x:.2f},{self.off_y:.2f}) | "
+            f"ConvoyPublisher | map_frame={self.frame} | base_frame={self.full_base_frame} | "
             f"resolution={self.resolution}m"
         )
 
-    def odom_callback(self, msg: Odometry):
-        pose = PoseStamped()
-        pose.header = msg.header
-        pose.header.frame_id = self.frame
-        pose.pose = msg.pose.pose
-        # Shift leader odom into the shared world frame.
-        pose.pose.position.x += self.off_x
-        pose.pose.position.y += self.off_y
+    def timer_callback(self):
+        now = self.get_clock().now()
+        
+        # 1. Look up current global pose
+        try:
+            trans = self.tf_buffer.lookup_transform(
+                self.frame,
+                self.full_base_frame,
+                rclpy.time.Time()
+            )
+            
+            pose = PoseStamped()
+            pose.header.stamp = trans.header.stamp
+            pose.header.frame_id = self.frame
+            pose.pose.position.x = trans.transform.translation.x
+            pose.pose.position.y = trans.transform.translation.y
+            pose.pose.position.z = trans.transform.translation.z
+            pose.pose.orientation = trans.transform.rotation
 
-        if not self.path_msg.poses:
-            self.path_msg.poses.append(pose)
-        else:
-            last_pose = self.path_msg.poses[-1]
-            dx = pose.pose.position.x - last_pose.pose.position.x
-            dy = pose.pose.position.y - last_pose.pose.position.y
-            if math.hypot(dx, dy) >= self.resolution:
+            # 2. Append to path if moved enough
+            if not self.path_msg.poses:
                 self.path_msg.poses.append(pose)
+            else:
+                last_pose = self.path_msg.poses[-1]
+                dx = pose.pose.position.x - last_pose.pose.position.x
+                dy = pose.pose.position.y - last_pose.pose.position.y
+                if math.hypot(dx, dy) >= self.resolution:
+                    self.path_msg.poses.append(pose)
 
-        # Keep path size bounded
-        if len(self.path_msg.poses) > self.max_poses:
-            self.path_msg.poses = self.path_msg.poses[-self.max_poses:]
+            # Keep path size bounded
+            if len(self.path_msg.poses) > self.max_poses:
+                self.path_msg.poses = self.path_msg.poses[-self.max_poses:]
+                
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            self.get_logger().warn(f"TF Lookup failed: {e}", throttle_duration_sec=2.0)
+            pass
 
-    def publish_path(self):
-        # Persistent-publication contract (R5.1, R5.2, R5.5, R5.6): the path is
-        self.path_msg.header.stamp = self.get_clock().now().to_msg()
+        # 3. Publish path
+        self.path_msg.header.stamp = now.to_msg()
         self.path_msg.header.frame_id = self.frame
         self.path_pub.publish(self.path_msg)
 

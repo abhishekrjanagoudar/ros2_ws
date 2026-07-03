@@ -133,6 +133,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
         self._emergency_since:   Optional[int]  = None   # wall-clock ns
         self._prev_emergency:    bool            = False
         self._state_for_timer_reset: FollowerState = FollowerState.TRACKING
+        self.last_state: FollowerState = FollowerState.TRACKING
         self._last_newest_time_ns: int          = 0      # ns since epoch
 
     # Breadcrumb-freshness update (called from _path_cb)
@@ -150,11 +151,33 @@ Stateful Pure Pursuit + state-machine convoy follower.
         scan,                               # sensor_msgs/LaserScan or None
         scan_age_s: float,                  # seconds since scan was received
         now_ns: int,                        # current wall-clock time [ns]
-    ) -> Tuple[float, float, bool]:
+        current_accum_x: float = 0.0,       # current map->odom TF x offset
+        current_accum_y: float = 0.0,       # current map->odom TF y offset
+    ) -> Tuple[float, float, float, float]:
         """
-Compute one control cycle.
-"""
+        Compute one control cycle.
+        Returns: (linear_x, angular_z, new_accum_x, new_accum_y)
+        """
         rx, ry, ryaw = pose
+        new_accum_x = current_accum_x
+        new_accum_y = current_accum_y
+
+        # 1. LiDAR Target Tracking
+        if scan is not None and len(path) > 0 and scan_age_s < 0.25:
+            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
+            rmin = scan.range_min if scan.range_min > 0 else 0.12
+            expected_bearing_deg = math.degrees(math.atan2(expected_local_y, expected_local_x))
+            
+            target_cluster, _ = process_scan(
+                ranges=list(scan.ranges),
+                angle_min=scan.angle_min,
+                angle_increment=scan.angle_increment,
+                range_min=rmin,
+                front_half_angle_deg=45.0,
+                center_angle_deg=expected_bearing_deg,
+                expected_local_pos=(expected_local_x, expected_local_y),
+                lock_radius=0.5
+            )
 
         # Costmap
         scan_stale = scan is None or scan_age_s > self.costmap_stale_timeout
@@ -168,6 +191,7 @@ Compute one control cycle.
             rmin = scan.range_min if scan.range_min > 0 else 0.12
             filtered_ranges = self.safety.filter_predecessor_returns(
                 list(scan.ranges), scan.angle_min, scan.angle_increment,
+                expected_bearing_deg=expected_bearing_deg if 'expected_bearing_deg' in locals() else 0.0,
             )
             cm = build_costmap(
                 filtered_ranges, scan.angle_min, scan.angle_increment,
@@ -194,7 +218,7 @@ Compute one control cycle.
                            path[-1][1] - path[0][1]) < self._gap * 0.5
         )
         if path_too_short:
-            return 0.0, 0.0, False
+            return 0.0, 0.0, new_accum_x, new_accum_y
 
         # Pure Pursuit
         search_start = max(0, self._last_closest_idx - 20)
@@ -228,36 +252,6 @@ Compute one control cycle.
         # 3. Goal in robot-local frame (blocking test + speed scaling).
         gx_local, gy_local = to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
         dist_to_goal        = math.hypot(gx_local, gy_local)
-
-        # LiDAR Target Tracking
-        if scan_for_safety is not None and len(path) > 0:
-            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
-            rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
-            target_cluster, _ = process_scan(
-                ranges=list(scan_for_safety.ranges),
-                angle_min=scan_for_safety.angle_min,
-                angle_increment=scan_for_safety.angle_increment,
-                range_min=rmin,
-                front_half_angle_deg=90.0,
-                expected_local_pos=(expected_local_x, expected_local_y),
-                lock_radius=2.0
-            )
-            if target_cluster is not None and target_cluster.confidence >= 0.2:
-                # Calculate physical error: where the leader actually is vs where Odometry thinks it is.
-                err_x = target_cluster.centroid_x - expected_local_x
-                err_y = target_cluster.centroid_y - expected_local_y
-                
-                # Apply an EMA filter to the offset to prevent violent swerves (alpha = 0.1)
-                if not hasattr(self, '_ema_err_x'):
-                    self._ema_err_x = err_x
-                    self._ema_err_y = err_y
-                else:
-                    self._ema_err_x = 0.1 * err_x + 0.9 * self._ema_err_x
-                    self._ema_err_y = 0.1 * err_y + 0.9 * self._ema_err_y
-                
-                # Shift the goal by the smoothed physical error to eliminate drift!
-                gx_local += self._ema_err_x
-                gy_local += self._ema_err_y
 
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:
@@ -387,7 +381,8 @@ Compute one control cycle.
         self._pending_linear_for_stationary = linear_x
 
         self._state_for_timer_reset = state
-        return linear_x, angular_z, safety_emergency_now
+        self.last_state = state
+        return linear_x, angular_z, new_accum_x, new_accum_y
 
     def update_stationary_timer(self, actual_linear: float, now_ns: int) -> None:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""

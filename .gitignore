@@ -1,21 +1,22 @@
+# ── Windows metadata (created when files are downloaded on Windows) ────────────
+*Zone.Identifier
+*:Zone.Identifier
+
+# ── Python build artefacts ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── ROS 2 / colcon build output ───────────────────────────────────────────────
 build/
 install/
 log/
-__pycache__/
-*.pyc
+
+
+# ── Editor / OS ───────────────────────────────────────────────────────────────
 .vscode/
-*:Zone.Identifier
-.antigravitycli/
-.robograph/
-.roo/
-.continue/
-*.zip
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-.clinerules
-.cursorrules
-.windsurfrules
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 ROS2/
-.agents/
-.pytest_cache/

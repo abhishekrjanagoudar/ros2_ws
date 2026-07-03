@@ -22,6 +22,7 @@ if _scripts_dir not in sys.path:
 from motion_controller import PursuitController, yaw_from_quaternion, slew
 from safety_controller import SafetyController
 from convoy_tracking import is_newer_breadcrumb
+from follower_state import FollowerState
 
 
 class FollowerNode(Node):
@@ -109,6 +110,7 @@ class FollowerNode(Node):
             safety=safety,
             enable_local_planner=bool(gp('enable_local_planner')),
         )
+        self._logged_state = None
 
         # Message caches (written by callbacks, read by control loop)
         self._pose: Optional[Tuple[float, float, float]] = None
@@ -128,14 +130,44 @@ class FollowerNode(Node):
         self._last_ang: float = 0.0
         self._dt = 1.0 / float(self.control_frequency)
 
+        # TF2 Setup
+        import tf2_ros
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.tf_static_broadcaster = tf2_ros.StaticTransformBroadcaster(self)
+
+        # Resolve frames
+        ns = self.get_namespace().strip('/')
+        self.odom_frame = f"{ns}/odom" if ns else "odom"
+        self.base_frame = f"{ns}/base_footprint" if ns else "base_footprint"
+        self.map_frame = "map"
+
+        # Accumulating offset for map -> odom TF
+        self.accum_x = self.off_x
+        self.accum_y = self.off_y
+
+        # Broadcast static map -> odom TF once
+        from geometry_msgs.msg import TransformStamped
+        from builtin_interfaces.msg import Time
+        t = TransformStamped()
+        t.header.stamp = Time(sec=0, nanosec=0)
+        t.header.frame_id = self.map_frame
+        t.child_frame_id = self.odom_frame
+        t.transform.translation.x = float(self.off_x)
+        t.transform.translation.y = float(self.off_y)
+        t.transform.translation.z = 0.0
+        t.transform.rotation.x = 0.0
+        t.transform.rotation.y = 0.0
+        t.transform.rotation.z = 0.0
+        t.transform.rotation.w = 1.0
+        self.tf_static_broadcaster.sendTransform(t)
+
         # ROS wiring
         qos = QoSProfile(depth=10,
                          reliability=ReliabilityPolicy.BEST_EFFORT,
                          durability=DurabilityPolicy.VOLATILE)
 
         self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
-        self.create_subscription(Odometry,   'odom',
-                                 self._odom_cb, qos)
         self.create_subscription(Path,       'convoy_path',
                                  self._path_cb, 10)
         self.create_subscription(LaserScan,  'scan',
@@ -156,15 +188,6 @@ class FollowerNode(Node):
         )
 
     # Callbacks: cache only
-
-    def _odom_cb(self, msg: Odometry) -> None:
-        p = msg.pose.pose.position
-        q = msg.pose.pose.orientation
-        self._pose = (
-            p.x + self.off_x,
-            p.y + self.off_y,
-            yaw_from_quaternion(q),
-        )
 
     def _path_cb(self, msg: Path) -> None:
         # Guard: ignore empty Path messages published during startup before the
@@ -187,6 +210,15 @@ class FollowerNode(Node):
         self._prev_count           = new_count
         self._prev_newest_stamp_ns = new_stamp_ns
 
+    def _odom_cb(self, msg: Odometry) -> None:
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        self._pose = (
+            p.x + self.accum_x,
+            p.y + self.accum_y,
+            yaw_from_quaternion(q),
+        )
+
     def _scan_cb(self, msg: LaserScan) -> None:
         self._scan         = msg
         self._scan_time_ns = self.get_clock().now().nanoseconds
@@ -194,6 +226,25 @@ class FollowerNode(Node):
     # Control loop
 
     def _control_loop(self) -> None:
+        now = self.get_clock().now()
+        now_ns = now.nanoseconds
+
+        # 1. Look up map -> base_footprint TF
+        try:
+            trans = self.tf_buffer.lookup_transform(
+                self.map_frame,
+                self.base_frame,
+                rclpy.time.Time()
+            )
+            self._pose = (
+                trans.transform.translation.x,
+                trans.transform.translation.y,
+                yaw_from_quaternion(trans.transform.rotation)
+            )
+        except Exception as e:
+            self.get_logger().warn(f"TF Lookup failed: {e}", throttle_duration_sec=2.0)
+            self._pose = None
+
         if self._pose is None or len(self._path) < 2:
             # Nothing to track yet — publish zero.
             if not self._has_ever_tracked:
@@ -211,13 +262,25 @@ class FollowerNode(Node):
             if self._scan_time_ns is not None else float('inf')
         )
 
-        linear_x, angular_z, _ = self._controller.step(
+        linear_x, angular_z, new_accum_x, new_accum_y = self._controller.step(
             pose=self._pose,
             path=self._path,
             scan=scan,
             scan_age_s=scan_age,
             now_ns=now_ns,
+            current_accum_x=self.accum_x,
+            current_accum_y=self.accum_y,
         )
+
+        cur_state = self._controller.last_state
+        if cur_state != self._logged_state:
+            if cur_state == FollowerState.DETOUR:
+                leader_pos = self._path[-1] if self._path else None
+                self.get_logger().info(
+                    f"DETOUR triggered | pose={self._pose} | leader_last_breadcrumb={leader_pos}"
+                )
+            self.get_logger().info(f"State: {self._logged_state} -> {cur_state}")
+            self._logged_state = cur_state
 
         self._publish_smoothed(linear_x, angular_z)
 

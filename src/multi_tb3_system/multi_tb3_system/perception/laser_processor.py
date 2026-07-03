@@ -60,14 +60,22 @@ Convert a LaserScan range array to a list of valid (x, y) Cartesian points
 def filter_front_sector(
     points: List[Tuple[float, float]],
     half_angle_deg: float = 30.0,
+    center_angle_deg: float = 0.0,
     min_x: float = 0.0,
 ) -> List[Tuple[float, float]]:
-    """Keep only points within ±half_angle_deg of straight ahead."""
+    """Keep only points within ±half_angle_deg of the given center_angle_deg."""
     half_angle_rad = math.radians(half_angle_deg)
-    return [
-        (x, y) for (x, y) in points
-        if x >= min_x and abs(math.atan2(y, x)) <= half_angle_rad
-    ]
+    center_angle_rad = math.radians(center_angle_deg)
+    filtered = []
+    for (x, y) in points:
+        if x < min_x:
+            continue
+        angle = math.atan2(y, x)
+        diff = angle - center_angle_rad
+        wrapped_diff = math.atan2(math.sin(diff), math.cos(diff))
+        if abs(wrapped_diff) <= half_angle_rad:
+            filtered.append((x, y))
+    return filtered
 
 
 def euclidean_cluster(
@@ -167,7 +175,7 @@ def select_target_cluster(
 
     # Fallback to closest cluster if no reference is valid or nothing in radius
     best = min(clusters, key=lambda c: c.distance)
-    best.confidence = 0.2  # Low confidence for fallback
+    best.confidence = 0.0  # Zero confidence for fallback to guarantee rejection
     return best
 
 
@@ -178,6 +186,7 @@ def process_scan(
     range_min: float = 0.12,
     range_max: float = 3.5,
     front_half_angle_deg: float = 60.0,
+    center_angle_deg: float = 0.0,
     cluster_distance: float = 0.20,
     min_cluster_size: int = 2,
     max_cluster_size: int = 40,
@@ -189,7 +198,7 @@ def process_scan(
     Full pipeline: raw LaserScan → (target_cluster, all_clusters).
     """
     points      = scan_to_cartesian(ranges, angle_min, angle_increment, range_min, range_max)
-    front       = filter_front_sector(points, half_angle_deg=front_half_angle_deg)
+    front       = filter_front_sector(points, half_angle_deg=front_half_angle_deg, center_angle_deg=center_angle_deg)
     raw         = euclidean_cluster(front, cluster_distance=cluster_distance)
     clusters    = make_clusters(raw, min_cluster_size, max_cluster_size)
     target      = select_target_cluster(

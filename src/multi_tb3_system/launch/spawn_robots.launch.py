@@ -18,7 +18,7 @@ from multi_tb3_system.launch_common import (
 )
 
 
-def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool) -> list:
+def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_leader: bool) -> list:
     """Return [spawn, rsp, bridge, static_tf] actions for one robot."""
     from multi_tb3_system.generate_sdf import generate_robot_sdf
 
@@ -66,21 +66,23 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool) -> lis
         output='screen',
     )
 
-    # Anchor tbX/odom to shared world frame at spawn position so all TF trees share a root.
+    actions = [spawn, rsp, bridge]
+    # Anchor all robot odom frames to shared map frame at spawn position so all TF trees share a root.
     static_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name=f'static_tf_world_{ns}_odom',
+        name=f'static_tf_map_{ns}_odom',
         arguments=[
-            '--x', str(x), '--y', '0', '--z', '0',
-            '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
-            '--frame-id', 'world',
-            '--child-frame-id', f'{ns}/odom',
+            str(x), '0', '0',
+            '0', '0', '0',
+            'map',
+            f'{ns}/odom',
         ],
         output='screen',
     )
+    actions.append(static_tf)
 
-    return [spawn, rsp, bridge, static_tf]
+    return actions
 
 
 def _launch_setup(context, *args, **kwargs):
@@ -93,7 +95,7 @@ def _launch_setup(context, *args, **kwargs):
 
     for i in range(1, total + 1):
         ns      = f'tb{i}'
-        actions = _make_robot_actions(ns, spawn_x(i), urdf, use_sim_time)
+        actions = _make_robot_actions(ns, spawn_x(i), urdf, use_sim_time, is_leader=(i == 1))
 
         if i == 1:
             all_actions.extend(actions)   # leader spawns immediately

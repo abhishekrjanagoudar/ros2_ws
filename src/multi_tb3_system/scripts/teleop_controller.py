@@ -34,6 +34,19 @@ SPEED_BINDINGS = {
 
 MSG = """
 ╔════════════════════════════════════════════════════╗
+║             TB3 CONVOY TELEOP CONTROL              ║
+╠════════════════════════════════════════════════════╣
+║  Movement (Hold to move):                          ║
+║        W                      I                    ║
+║      A S D                  J K L                  ║
+║        X                      ,                    ║
+║                                                    ║
+║  Speed Control:                                    ║
+║    Q / Z : Increase/Decrease Max Speeds by 10%     ║
+║    E / C : Increase/Decrease Angular Speed by 10%  ║
+║                                                    ║
+║  CTRL-C to quit                                    ║
+╚════════════════════════════════════════════════════╝
 """
 
 SPEED_MSG = "\rLinear: {lin:.2f} m/s  |  Angular: {ang:.2f} rad/s    "

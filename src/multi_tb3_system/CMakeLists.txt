@@ -31,6 +31,7 @@ install(PROGRAMS
   scripts/costmap_utils.py
   scripts/follower_node.py
   scripts/follower_state.py
+  scripts/local_planner.py
   scripts/motion_controller.py
   scripts/safety_controller.py
   scripts/teleop_controller.py

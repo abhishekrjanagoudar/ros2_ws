@@ -172,6 +172,7 @@ Single-pass safety check — preferred in tight control loops.
         ranges: list,
         angle_min: float,
         angle_increment: float,
+        expected_bearing_deg: float = 0.0,
     ) -> list:
         """Return a copy of ranges with predecessor returns set to inf."""
         if self.predecessor_gap <= 0.0:
@@ -182,8 +183,9 @@ Single-pass safety check — preferred in tight control loops.
         filtered = list(ranges)
         for i, r in enumerate(filtered):
             angle = angle_min + i * angle_increment
-            angle = math.atan2(math.sin(angle), math.cos(angle))
-            if abs(angle) <= PREDECESSOR_HALF_ANGLE and lo <= r <= hi:
+            center_rad = math.radians(expected_bearing_deg)
+            ang_diff = math.atan2(math.sin(angle - center_rad), math.cos(angle - center_rad))
+            if abs(ang_diff) <= PREDECESSOR_HALF_ANGLE and lo <= r <= hi:
                 filtered[i] = float('inf')
         return filtered
 

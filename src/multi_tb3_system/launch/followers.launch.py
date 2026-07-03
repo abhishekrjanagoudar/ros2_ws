@@ -49,7 +49,7 @@ def _launch_setup(context, *args, **kwargs):
             namespace=ns,
             parameters=[{
                 'use_sim_time':   use_sim_time,
-                'path_frame':     'world',
+                'path_frame':     'map',
                 'spawn_offset_x': spawn_x(i),
                 'spawn_offset_y': SPAWN_Y,
             }],
