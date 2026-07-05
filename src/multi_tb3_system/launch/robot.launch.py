@@ -26,6 +26,8 @@ def _resolve_ui_flags(context, *args, **kwargs):
     nBurger        = LaunchConfiguration('nBurger').perform(context)
     world          = LaunchConfiguration('world').perform(context)
     use_sim_time   = LaunchConfiguration('use_sim_time').perform(context)
+    enable_followers = LaunchConfiguration('enable_followers').perform(context)
+    enable_rf2o    = LaunchConfiguration('enable_rf2o').perform(context)
 
     # ros_ui=true → both GUIs on. ros_ui=false (default) → respect individual gz/rviz flags.
     if ros_ui == 'true':
@@ -48,9 +50,11 @@ def _resolve_ui_flags(context, *args, **kwargs):
 
     actions = [
         _include('worlds.launch.py',       {'world': world, 'gz': effective_gz}),
-        _include('spawn_robots.launch.py', {'nBurger': nBurger}),
-        _include('followers.launch.py',    {'nBurger': nBurger, 'rviz': effective_rviz}),
+        _include('spawn_robots.launch.py', {'nBurger': nBurger, 'enable_rf2o': enable_rf2o}),
     ]
+    if enable_followers == 'true':
+        actions.append(_include('followers.launch.py', {'nBurger': nBurger, 'rviz': effective_rviz}))
+    
     if effective_rviz == 'true':
         actions.append(_include('rviz.launch.py'))
 
@@ -75,6 +79,10 @@ def generate_launch_description() -> LaunchDescription:
                               description="Show RViz2. Overridden by ros_ui."),
         DeclareLaunchArgument('ros_ui',       default_value='false',
                               description="'true' → gz=true + rviz=true. Overrides gz and rviz."),
+        DeclareLaunchArgument('enable_followers', default_value='true',
+                              description="Include followers.launch.py (Costmaps, Convoy Publisher, Followers)."),
+        DeclareLaunchArgument('enable_rf2o', default_value='true',
+                              description="Enable RF2O laser odometry nodes."),
 
         # Expose TurtleBot3 mesh assets to Gazebo
         AppendEnvironmentVariable(
