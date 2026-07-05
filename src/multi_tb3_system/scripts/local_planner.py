@@ -141,7 +141,7 @@ class LocalPlanner:
         # Dynamic window: reachable velocities from current velocity
         # Allow backward motion for escape
         min_linear = max(
-            -0.10,  # Allow slow backward motion for escape
+            0.0,  # Do not allow backward motion
             self.current_linear - self.max_linear_acc * self.control_period
         )
         max_linear = min(

@@ -153,18 +153,32 @@ Stateful Pure Pursuit + state-machine convoy follower.
         now_ns: int,                        # current wall-clock time [ns]
         current_accum_x: float = 0.0,       # current map->odom TF x offset
         current_accum_y: float = 0.0,       # current map->odom TF y offset
-    ) -> Tuple[float, float, float, float]:
+        current_accum_yaw: float = 0.0,     # current map->odom TF yaw offset
+    ) -> Tuple[float, float, float, float, float]:
         """
         Compute one control cycle.
-        Returns: (linear_x, angular_z, new_accum_x, new_accum_y)
+        Returns: (linear_x, angular_z, new_accum_x, new_accum_y, new_accum_yaw)
         """
         rx, ry, ryaw = pose
         new_accum_x = current_accum_x
         new_accum_y = current_accum_y
+        new_accum_yaw = current_accum_yaw
 
         # 1. LiDAR Target Tracking
         if scan is not None and len(path) > 0 and scan_age_s < 0.25:
-            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
+            corr_rx = rx - current_accum_x
+            corr_ry = ry - current_accum_y
+            corr_ryaw = ryaw - current_accum_yaw
+            
+            # Use drift-corrected pose to anchor the cluster search
+            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], corr_rx, corr_ry, corr_ryaw)
+            
+            # Compensate for centroid-vs-surface offset (LiDAR sees surface ~0.07m closer than center)
+            dist_corr = math.hypot(expected_local_x, expected_local_y)
+            if dist_corr > 0.07:
+                expected_local_x -= (expected_local_x / dist_corr) * 0.07
+                expected_local_y -= (expected_local_y / dist_corr) * 0.07
+                
             rmin = scan.range_min if scan.range_min > 0 else 0.12
             expected_bearing_deg = math.degrees(math.atan2(expected_local_y, expected_local_x))
             
@@ -175,9 +189,53 @@ Stateful Pure Pursuit + state-machine convoy follower.
                 range_min=rmin,
                 front_half_angle_deg=45.0,
                 center_angle_deg=expected_bearing_deg,
+                last_target_pos=self._last_target_pos if hasattr(self, '_last_target_pos') else None,
                 expected_local_pos=(expected_local_x, expected_local_y),
                 lock_radius=0.5
             )
+
+            if target_cluster is not None and target_cluster.confidence > 0.5:
+                # Save target for continuity across cycles
+                self._last_target_pos = (target_cluster.centroid_x, target_cluster.centroid_y)
+                
+                # Compute Yaw Drift First
+                true_global_angle = math.atan2(path[-1][1] - corr_ry, path[-1][0] - corr_rx)
+                true_local_angle = math.atan2(target_cluster.centroid_y, target_cluster.centroid_x)
+                
+                true_yaw = true_global_angle - true_local_angle
+                yaw_error = ryaw - true_yaw
+                yaw_error = math.atan2(math.sin(yaw_error), math.cos(yaw_error))
+                
+                alpha_yaw = 0.05
+                new_accum_yaw = (1.0 - alpha_yaw) * current_accum_yaw + alpha_yaw * yaw_error
+                corr_ryaw = ryaw - new_accum_yaw
+                
+                # Calculate the raw expected position to determine the TOTAL map drift.
+                # Must use corr_ryaw to prevent runaway coordinate spiral
+                raw_exp_x, raw_exp_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, corr_ryaw)
+                dist_raw = math.hypot(raw_exp_x, raw_exp_y)
+                if dist_raw > 0.07:
+                    raw_exp_x -= (raw_exp_x / dist_raw) * 0.07
+                    raw_exp_y -= (raw_exp_y / dist_raw) * 0.07
+                    
+                # Local physical error against uncorrected pose so EMA tracks total drift
+                err_x_local = target_cluster.centroid_x - raw_exp_x
+                err_y_local = target_cluster.centroid_y - raw_exp_y
+                
+                # Convert to global error (R_odom - R_true) using corrected yaw
+                err_x_global = err_x_local * math.cos(corr_ryaw) - err_y_local * math.sin(corr_ryaw)
+                err_y_global = err_x_local * math.sin(corr_ryaw) + err_y_local * math.cos(corr_ryaw)
+                
+                # EMA filter to prevent violent swerves
+                alpha_ema = 0.1
+                new_accum_x = (1.0 - alpha_ema) * current_accum_x + alpha_ema * err_x_global
+                new_accum_y = (1.0 - alpha_ema) * current_accum_y + alpha_ema * err_y_global
+
+        # Shift the robot's perceived pose by the accumulated offset
+        rx -= new_accum_x
+        ry -= new_accum_y
+        ryaw -= new_accum_yaw
+        ryaw = math.atan2(math.sin(ryaw), math.cos(ryaw))
 
         # Costmap
         scan_stale = scan is None or scan_age_s > self.costmap_stale_timeout
@@ -189,10 +247,24 @@ Stateful Pure Pursuit + state-machine convoy follower.
             scan_for_safety = None
         else:
             rmin = scan.range_min if scan.range_min > 0 else 0.12
+
+            # Compute predecessor bearing if we have a path
+            expected_bearing_deg = 0.0
+            if len(path) > 0:
+                pred_x, pred_y = path[-1]
+                dx = pred_x - rx
+                dy = pred_y - ry
+                local_dx = dx * math.cos(-ryaw) - dy * math.sin(-ryaw)
+                local_dy = dx * math.sin(-ryaw) + dy * math.cos(-ryaw)
+                expected_bearing_deg = math.degrees(math.atan2(local_dy, local_dx))
+
             filtered_ranges = self.safety.filter_predecessor_returns(
-                list(scan.ranges), scan.angle_min, scan.angle_increment,
-                expected_bearing_deg=expected_bearing_deg if 'expected_bearing_deg' in locals() else 0.0,
+                ranges=list(scan.ranges),
+                angle_min=scan.angle_min,
+                angle_increment=scan.angle_increment,
+                expected_bearing_deg=expected_bearing_deg
             )
+
             cm = build_costmap(
                 filtered_ranges, scan.angle_min, scan.angle_increment,
                 rmin, scan.range_max,
@@ -213,9 +285,9 @@ Stateful Pure Pursuit + state-machine convoy follower.
 
         # Path-length guard (P4)
         path_too_short = (
-            goal_idx == 0 and len(path) > 1
-            and math.hypot(path[-1][0] - path[0][0],
-                           path[-1][1] - path[0][1]) < self._gap * 0.5
+            len(path) == 1 or
+            (goal_idx == 0 and math.hypot(path[-1][0] - path[0][0],
+                                          path[-1][1] - path[0][1]) < self._gap * 0.95)
         )
         if path_too_short:
             return 0.0, 0.0, new_accum_x, new_accum_y
@@ -359,6 +431,12 @@ Stateful Pure Pursuit + state-machine convoy follower.
         if scan_for_safety is not None:
             s    = scan_for_safety
             rmin = s.range_min if s.range_min > 0 else 0.12
+            
+            exp_bearing_deg = 0.0
+            if len(path) > 0:
+                exp_x, exp_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
+                exp_bearing_deg = math.degrees(math.atan2(exp_y, exp_x))
+                
             linear_x, angular_z, safety_emergency_now = self.safety.check_and_modify_ex(
                 linear_x=linear_x,
                 angular_z=angular_z,
@@ -366,6 +444,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
                 angle_min=s.angle_min,
                 angle_increment=s.angle_increment,
                 range_min=rmin,
+                expected_bearing_deg=exp_bearing_deg,
             )
 
         # Emergency-duration timer (updated with the real flag)
@@ -382,7 +461,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
 
         self._state_for_timer_reset = state
         self.last_state = state
-        return linear_x, angular_z, new_accum_x, new_accum_y
+        return float(linear_x), float(angular_z), new_accum_x, new_accum_y, new_accum_yaw
 
     def update_stationary_timer(self, actual_linear: float, now_ns: int) -> None:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""

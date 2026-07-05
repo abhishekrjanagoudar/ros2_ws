@@ -57,3 +57,9 @@ costmap_generator:
     costmap_stale_timeout:       1.0
     costmap_frame:               ''
     range_min_override:          0.0
+
+convoy_publisher:
+  ros__parameters:
+    path_resolution: 0.01
+    yaw_resolution: 0.05
+

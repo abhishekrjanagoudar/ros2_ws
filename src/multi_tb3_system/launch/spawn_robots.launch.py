@@ -5,6 +5,7 @@ spawn_robots.launch.py — spawns N+1 TurtleBot3 robots (leader + followers).
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -48,6 +49,10 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
             'robot_description': urdf,
             'frame_prefix':      f'{ns}/',   # scopes TF frames: ns/base_link, etc.
         }],
+        remappings=[
+            ('tf', '/tf'),
+            ('tf_static', '/tf_static'),
+        ],
         output='screen',
     )
 
@@ -58,29 +63,58 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
         name=f'bridge_{ns}',
         arguments=[
             f'/{ns}/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
-            f'/{ns}/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
             f'/{ns}/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             f'/{ns}/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
-            '/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
         ],
         output='screen',
     )
 
     actions = [spawn, rsp, bridge]
+
     # Anchor all robot odom frames to shared map frame at spawn position so all TF trees share a root.
     static_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name=f'static_tf_map_{ns}_odom',
         arguments=[
-            str(x), '0', '0',
-            '0', '0', '0',
-            'map',
-            f'{ns}/odom',
+            '--x', str(x), '--y', '0', '--z', '0',
+            '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
+            '--frame-id', 'map',
+            '--child-frame-id', f'{ns}/odom',
         ],
+        parameters=[{'use_sim_time': use_sim_time}],
         output='screen',
     )
     actions.append(static_tf)
+
+    # Mapless Laser Odometry
+    # Launched with a delay so Gazebo/Bridge can spin up and /scan exists
+    rf2o = Node(
+        package='rf2o_laser_odometry',
+        executable='rf2o_laser_odometry_node',
+        name=f'rf2o_{ns}',
+        namespace=ns,
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'laser_scan_topic': f'/{ns}/scan',
+            'odom_topic': f'/{ns}/odom',
+            'publish_tf': True,
+            'base_frame_id': f'{ns}/base_footprint',
+            'odom_frame_id': f'{ns}/odom',
+            'init_pose_from_topic': '',
+            'freq': 30.0
+        }],
+        remappings=[
+            ('tf', '/tf'),
+            ('tf_static', '/tf_static'),
+        ],
+        output='screen',
+    )
+    actions.append(TimerAction(
+        period=3.0,
+        actions=[rf2o],
+        condition=IfCondition(LaunchConfiguration('enable_rf2o'))
+    ))
 
     return actions
 
@@ -111,5 +145,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='Follower count (1–2). Total = nBurger + 1.'),
         DeclareLaunchArgument('use_sim_time', default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
+        DeclareLaunchArgument('enable_rf2o',  default_value='true',
+                              description='Enable RF2O laser odometry nodes.'),
         OpaqueFunction(function=_launch_setup),
     ])

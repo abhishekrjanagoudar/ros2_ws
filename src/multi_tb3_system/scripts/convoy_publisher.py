@@ -20,11 +20,13 @@ class ConvoyPublisher(Node):
         self.declare_parameter('path_resolution', 0.01)
         self.declare_parameter('path_frame', 'map')
         self.declare_parameter('base_frame', 'base_footprint')
+        self.declare_parameter('yaw_resolution', 0.05)  # rad; gates breadcrumbs during rotation-in-place
 
-        self.max_poses  = self.get_parameter('max_path_poses').value
-        self.resolution = self.get_parameter('path_resolution').value
-        self.frame      = self.get_parameter('path_frame').value
-        self.base_frame = self.get_parameter('base_frame').value
+        self.max_poses      = self.get_parameter('max_path_poses').value
+        self.resolution     = self.get_parameter('path_resolution').value
+        self.frame          = self.get_parameter('path_frame').value
+        self.base_frame     = self.get_parameter('base_frame').value
+        self.yaw_resolution = self.get_parameter('yaw_resolution').value
         
         # Resolve full base frame (e.g. 'tb1/base_footprint')
         ns = self.get_namespace().strip('/')
@@ -47,6 +49,14 @@ class ConvoyPublisher(Node):
             f"resolution={self.resolution}m"
         )
 
+    @staticmethod
+    def _yaw_delta(q_prev, q_cur) -> float:
+        """Shortest-path yaw difference between two orientations (2D, z/w only)."""
+        def yaw(q):
+            return math.atan2(2.0 * (q.w * q.z), 1.0 - 2.0 * (q.z * q.z))
+        d = yaw(q_cur) - yaw(q_prev)
+        return math.atan2(math.sin(d), math.cos(d))
+
     def timer_callback(self):
         now = self.get_clock().now()
         
@@ -66,14 +76,15 @@ class ConvoyPublisher(Node):
             pose.pose.position.z = trans.transform.translation.z
             pose.pose.orientation = trans.transform.rotation
 
-            # 2. Append to path if moved enough
+            # 2. Append to path if moved or turned enough
             if not self.path_msg.poses:
                 self.path_msg.poses.append(pose)
             else:
                 last_pose = self.path_msg.poses[-1]
                 dx = pose.pose.position.x - last_pose.pose.position.x
                 dy = pose.pose.position.y - last_pose.pose.position.y
-                if math.hypot(dx, dy) >= self.resolution:
+                dyaw = self._yaw_delta(last_pose.pose.orientation, pose.pose.orientation)
+                if math.hypot(dx, dy) >= self.resolution or abs(dyaw) >= self.yaw_resolution:
                     self.path_msg.poses.append(pose)
 
             # Keep path size bounded

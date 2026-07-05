@@ -136,16 +136,16 @@
         <always_on>true</always_on>
         <visualize>true</visualize>
         <pose>-0.032 0 0.171 0 0 0</pose>
-        <update_rate>20</update_rate>
+        <update_rate>5</update_rate>
         <topic>scan</topic>
         <gz_frame_id>base_scan</gz_frame_id>
         <lidar>
           <scan>
             <horizontal>
-              <samples>360</samples>
+              <samples>240</samples>
               <resolution>1.000000</resolution>
-              <min_angle>0.000000</min_angle>
-              <max_angle>6.280000</max_angle>
+              <min_angle>-2.094395</min_angle>
+              <max_angle>2.094395</max_angle>
             </horizontal>
           </scan>
           <range>
@@ -380,15 +380,15 @@
       <right_joint>wheel_right_joint</right_joint>
 
       <!-- kinematics -->
-      <wheel_separation>0.160</wheel_separation>
-      <wheel_radius>0.033</wheel_radius>
+      <wheel_separation>0.1695</wheel_separation>
+      <wheel_radius>0.0306</wheel_radius>
 
       <!-- limits -->
       <max_linear_acceleration>1.0</max_linear_acceleration>
 
 
 
-      <frame_id>odom</frame_id>
+      <frame_id>odom_gz</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
       <odom_publisher_frequency>30</odom_publisher_frequency>
 

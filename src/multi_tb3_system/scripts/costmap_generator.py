@@ -149,9 +149,11 @@ No-ops when ``enable_costmap_viz`` is false (headless mode) to avoid
         msg = OccupancyGrid()
         msg.header.stamp = self.get_clock().now().to_msg()
         # Prefer the explicit ``costmap_frame`` parameter; fall back to
+        ns = self.get_namespace().strip('/')
+        fallback_frame = f"{ns}/base_scan" if ns else 'base_scan'
         msg.header.frame_id = (
             self.costmap_frame
-            or (self._scan.header.frame_id if self._scan is not None else 'base_scan')
+            or (self._scan.header.frame_id if self._scan is not None else fallback_frame)
         )
         msg.info.resolution = float(cm.resolution)
         msg.info.width = int(cm.width)

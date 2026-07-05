@@ -129,6 +129,9 @@ class FollowerNode(Node):
         self._last_lin: float = 0.0
         self._last_ang: float = 0.0
         self._dt = 1.0 / float(self.control_frequency)
+        self._accum_x: float = 0.0
+        self._accum_y: float = 0.0
+        self._accum_yaw: float = 0.0
 
         # TF2 Setup
         import tf2_ros
@@ -141,26 +144,6 @@ class FollowerNode(Node):
         self.odom_frame = f"{ns}/odom" if ns else "odom"
         self.base_frame = f"{ns}/base_footprint" if ns else "base_footprint"
         self.map_frame = "map"
-
-        # Accumulating offset for map -> odom TF
-        self.accum_x = self.off_x
-        self.accum_y = self.off_y
-
-        # Broadcast static map -> odom TF once
-        from geometry_msgs.msg import TransformStamped
-        from builtin_interfaces.msg import Time
-        t = TransformStamped()
-        t.header.stamp = Time(sec=0, nanosec=0)
-        t.header.frame_id = self.map_frame
-        t.child_frame_id = self.odom_frame
-        t.transform.translation.x = float(self.off_x)
-        t.transform.translation.y = float(self.off_y)
-        t.transform.translation.z = 0.0
-        t.transform.rotation.x = 0.0
-        t.transform.rotation.y = 0.0
-        t.transform.rotation.z = 0.0
-        t.transform.rotation.w = 1.0
-        self.tf_static_broadcaster.sendTransform(t)
 
         # ROS wiring
         qos = QoSProfile(depth=10,
@@ -214,8 +197,8 @@ class FollowerNode(Node):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         self._pose = (
-            p.x + self.accum_x,
-            p.y + self.accum_y,
+            p.x,
+            p.y,
             yaw_from_quaternion(q),
         )
 
@@ -262,14 +245,15 @@ class FollowerNode(Node):
             if self._scan_time_ns is not None else float('inf')
         )
 
-        linear_x, angular_z, new_accum_x, new_accum_y = self._controller.step(
+        linear_x, angular_z, self._accum_x, self._accum_y, self._accum_yaw = self._controller.step(
             pose=self._pose,
             path=self._path,
             scan=scan,
             scan_age_s=scan_age,
             now_ns=now_ns,
-            current_accum_x=self.accum_x,
-            current_accum_y=self.accum_y,
+            current_accum_x=self._accum_x,
+            current_accum_y=self._accum_y,
+            current_accum_yaw=self._accum_yaw
         )
 
         cur_state = self._controller.last_state

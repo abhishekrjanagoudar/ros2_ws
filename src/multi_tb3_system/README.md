@@ -18,7 +18,9 @@
 
 ## Overview
 
-3-robot TurtleBot3 Burger convoy in Gazebo Sim. `tb1` is teleoperated; `tb2` and `tb3` follow using **Pure Pursuit** on a shared `nav_msgs/Path`. LiDAR is used for emergency stop and local costmap-based obstacle avoidance.
+3-robot TurtleBot3 Burger convoy in Gazebo Sim. `tb1` is teleoperated; `tb2` and `tb3` follow using **Pure Pursuit** on a shared `nav_msgs/Path`. 
+
+**Strictly Mapless Laser Odometry**: To combat Gazebo's simulated wheel slip without relying on a global SLAM map, this project integrates `rf2o_laser_odometry`. It performs Iterative Closest Point (ICP) scan-matching to perfectly sync the physical world with the universal `map` frame, allowing flawlessly accurate breadcrumb tracking across the convoy.
 
 ---
 
@@ -40,8 +42,16 @@ export TURTLEBOT3_MODEL=burger
 
 ## Build
 
+First, clone the laser odometry dependency into your workspace (if not already present):
 ```bash
-colcon build --packages-select multi_tb3_system
+cd ~/ros2_ws/src
+git clone -b ros2 https://github.com/MAPIRlab/rf2o_laser_odometry.git
+cd ~/ros2_ws
+```
+
+Then build the workspace:
+```bash
+colcon build --packages-select multi_tb3_system rf2o_laser_odometry
 source install/setup.bash
 ```
 
@@ -91,9 +101,7 @@ multi_tb3_system/
 │   └── teleop_controller.py        # Burst-mode keyboard teleop
 ├── multi_tb3_system/               # Importable Python package
 │   ├── launch_common.py            # Convoy geometry constants (single source of truth)
-│   ├── generate_sdf.py             # Per-robot SDF generator
-│   └── perception/
-│       └── laser_processor.py      # Scan clustering library (future use)
+│   └── generate_sdf.py             # Per-robot SDF generator
 ├── launch/
 │   ├── robot.launch.py             # ⭐ Entry point
 │   ├── followers.launch.py         # Starts convoy_publisher + costmap + followers

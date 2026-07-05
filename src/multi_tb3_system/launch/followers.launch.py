@@ -33,10 +33,7 @@ def _launch_setup(context, *args, **kwargs):
 
     #  Startup timeline (all times relative to when this launch file is invoked,
 
-    CONVOY_PUB_START  = 0.0    # leader path recording — start immediately
-    COSTMAP_START     = 0.38   # per-robot costmap generator — after scan is live
-    FOLLOWER1_START   = 1.00   # tb2 follower node
-    FOLLOWER2_START   = 1.25   # tb3 follower node — 0.5s after tb2
+    from multi_tb3_system.launch_common import spawn_delay
 
     # Path publishers for all predecessors (tb1 ... tb[N])
     # tb1 drops breadcrumbs for tb2. tb2 drops breadcrumbs for tb3, etc.
@@ -47,16 +44,14 @@ def _launch_setup(context, *args, **kwargs):
             executable='convoy_publisher.py',
             name='convoy_publisher',
             namespace=ns,
-            parameters=[{
+            parameters=[params_file, {
                 'use_sim_time':   use_sim_time,
                 'path_frame':     'map',
-                'spawn_offset_x': spawn_x(i),
-                'spawn_offset_y': SPAWN_Y,
             }],
             output='screen',
             emulate_tty=True,
         )
-        delay = CONVOY_PUB_START if i == 1 else FOLLOWER1_START + (i - 2) * 2.0
+        delay = spawn_delay(i) + 4.0
         actions.append(TimerAction(period=delay, actions=[convoy_pub]))
 
     # Per-robot costmap_generator (tb1, tb2, tb3, ...)
@@ -77,16 +72,14 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             emulate_tty=True,
         )
-        actions.append(TimerAction(period=COSTMAP_START, actions=[cg_node]))
+        delay = spawn_delay(i) + 4.5
+        actions.append(TimerAction(period=delay, actions=[cg_node]))
 
     # Pure-Pursuit followers (tb2, tb3, ...)
-    follower_delays = {2: FOLLOWER1_START, 3: FOLLOWER2_START}
-
     for i in range(2, n_burgers + 2):
         ns = f'tb{i}'
         leader_ns = f'tb{i-1}'  # Daisy-chain: tb[i] tracks tb[i-1]
         
-        delay = follower_delays.get(i, FOLLOWER1_START + (i - 2) * 2.0)
         node = Node(
             package='multi_tb3_system',
             executable='follower_node.py',
@@ -108,6 +101,7 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             emulate_tty=True,
         )
+        delay = spawn_delay(i) + 5.0
         actions.append(TimerAction(period=delay, actions=[node]))
 
     return actions

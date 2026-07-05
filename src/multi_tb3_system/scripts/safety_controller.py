@@ -43,6 +43,7 @@ Initialize the safety controller.
         angle_min: float,
         angle_increment: float,
         range_min: float,
+        expected_bearing_deg: float = 0.0,
     ) -> Tuple[float, float, bool]:
         """
 Returns (min_left, min_right, is_emergency).
@@ -69,8 +70,11 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
                 # Filter out predecessor for steering bias only
                 PREDECESSOR_HALF_ANGLE = math.radians(15.0)
+                expected_bearing_rad = math.radians(expected_bearing_deg)
+                diff = angle - expected_bearing_rad
+                wrapped_diff = math.atan2(math.sin(diff), math.cos(diff))
                 if (self.predecessor_gap > 0.0
-                        and abs(angle) <= PREDECESSOR_HALF_ANGLE):
+                        and abs(wrapped_diff) <= PREDECESSOR_HALF_ANGLE):
                     lo = self.predecessor_gap * 0.3
                     hi = self.predecessor_gap * 1.2
                     if lo <= r <= hi:
@@ -137,12 +141,13 @@ Apply safety rules and return the (possibly modified) velocity pair.
         angle_min: float,
         angle_increment: float,
         range_min: float = 0.12,
+        expected_bearing_deg: float = 0.0,
     ) -> Tuple[float, float, bool]:
         """
 Single-pass safety check — preferred in tight control loops.
 """
         min_left, min_right, is_emerg = self._scan_sides(
-            ranges, angle_min, angle_increment, range_min,
+            ranges, angle_min, angle_increment, range_min, expected_bearing_deg,
         )
         safe_lin, safe_ang = self._apply_rules(
             linear_x, angular_z, min_left, min_right, is_emerg,
