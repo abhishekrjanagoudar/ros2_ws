@@ -172,34 +172,34 @@
     <!-- ── Enclosure Walls (To provide dense features for LiDAR scan-matching) ── -->
     <model name="wall_north">
       <static>true</static>
-      <pose>4.0 4.0 0.5 0 0 0</pose>
+      <pose>4.0 5.0 0.5 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>10.0 0.1 1.0</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>10.0 0.1 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
+        <collision name="collision"><geometry><box><size>12.0 0.1 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12.0 0.1 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
       </link>
     </model>
     <model name="wall_south">
       <static>true</static>
-      <pose>4.0 -4.0 0.5 0 0 0</pose>
+      <pose>4.0 -5.0 0.5 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>10.0 0.1 1.0</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>10.0 0.1 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
+        <collision name="collision"><geometry><box><size>12.0 0.1 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12.0 0.1 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
       </link>
     </model>
     <model name="wall_east">
       <static>true</static>
-      <pose>9.0 0 0.5 0 0 0</pose>
+      <pose>10.0 0 0.5 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.1 8.0 1.0</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.1 8.0 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
+        <collision name="collision"><geometry><box><size>0.1 10.0 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.1 10.0 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
       </link>
     </model>
     <model name="wall_west">
       <static>true</static>
-      <pose>-1.0 0 0.5 0 0 0</pose>
+      <pose>-2.0 0 0.5 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.1 8.0 1.0</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.1 8.0 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
+        <collision name="collision"><geometry><box><size>0.1 10.0 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.1 10.0 1.0</size></box></geometry><material><ambient>0.6 0.6 0.6 1</ambient></material></visual>
       </link>
     </model>
 

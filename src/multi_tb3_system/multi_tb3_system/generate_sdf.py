@@ -10,12 +10,8 @@ from ament_index_python.packages import get_package_share_directory
 
 logger = logging.getLogger(__name__)
 
-# Individual Wheel Calibrations
-WHEEL_CONFIGS = {
-    'tb1': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
-    'tb2': {'wheel_radius': 0.0320, 'wheel_separation': 0.1617},
-    'tb3': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
-}
+# No individual configs, use perfect physics in model.sdf
+WHEEL_CONFIGS = {}
 
 # Topic replacement map
 
@@ -63,7 +59,7 @@ Ensure the DiffDrive plugin block contains explicit <topic>, <odom_topic>,
         if '<topic>' not in body:
             injections.append(f'      <topic>/{ns}/cmd_vel</topic>')
         if '<odom_topic>' not in body:
-            injections.append(f'      <odom_topic>/{ns}/odom_wheels</odom_topic>')
+            injections.append(f'      <odom_topic>/{ns}/odom</odom_topic>')
         if '<tf_topic>' not in body:
             injections.append('      <tf_topic>/tf</tf_topic>')
 

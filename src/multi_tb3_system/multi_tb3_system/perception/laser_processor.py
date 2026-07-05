@@ -153,29 +153,35 @@ def select_target_cluster(
     if not clusters:
         return None
 
-    # Determine reference position for selection
-    ref_x, ref_y = None, None
+    # 1. Try cross-cycle continuity first (tight physical track)
+    if last_target_pos is not None:
+        ref_x, ref_y = last_target_pos
+        best = min(clusters, key=lambda c: math.hypot(c.centroid_x - ref_x, c.centroid_y - ref_y))
+        dist_to_ref = math.hypot(best.centroid_x - ref_x, best.centroid_y - ref_y)
+        
+        if dist_to_ref <= lock_radius * 0.5:
+            dist_conf = max(0.0, 1.0 - (dist_to_ref / lock_radius))
+            width_error = abs(best.physical_width - 0.14)
+            width_conf = max(0.0, 1.0 - (width_error / 0.15))
+            best.confidence = dist_conf * width_conf
+            return best
+
+    # 2. Fall back to the open-loop breadcrumb prediction
     if expected_local_pos is not None:
         ref_x, ref_y = expected_local_pos
-    elif last_target_pos is not None:
-        ref_x, ref_y = last_target_pos
-
-    if ref_x is not None and ref_y is not None:
         best = min(clusters, key=lambda c: math.hypot(c.centroid_x - ref_x, c.centroid_y - ref_y))
         dist_to_ref = math.hypot(best.centroid_x - ref_x, best.centroid_y - ref_y)
         
         if dist_to_ref <= lock_radius:
-            # Calculate confidence based on distance and expected width (0.14m)
             dist_conf = max(0.0, 1.0 - (dist_to_ref / lock_radius))
             width_error = abs(best.physical_width - 0.14)
             width_conf = max(0.0, 1.0 - (width_error / 0.15))
-            
             best.confidence = dist_conf * width_conf
             return best
 
-    # Fallback to closest cluster if no reference is valid or nothing in radius
+    # 3. Fallback to closest cluster if nothing is in radius (forces rejection via 0 confidence)
     best = min(clusters, key=lambda c: c.distance)
-    best.confidence = 0.0  # Zero confidence for fallback to guarantee rejection
+    best.confidence = 0.0
     return best
 
 

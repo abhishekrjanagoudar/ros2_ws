@@ -860,7 +860,7 @@ bool CLaserOdometry2D::filterLevelSolution()
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigensolver(cov_odo);
   if (eigensolver.info() != Eigen::Success)
   {
-    RCLCPP_WARN(get_logger(), "WARNING: Eigensolver couldn't find a solution. Pose is not updated");
+    // RCLCPP_WARN(get_logger(), "WARNING: Eigensolver couldn't find a solution. Pose is not updated");
     return false;
   }
 

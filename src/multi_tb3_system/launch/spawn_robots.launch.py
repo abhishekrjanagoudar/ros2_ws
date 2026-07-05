@@ -145,7 +145,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='Follower count (1–2). Total = nBurger + 1.'),
         DeclareLaunchArgument('use_sim_time', default_value='true',
                               description="'true' = Gz clock, 'false' = wall clock."),
-        DeclareLaunchArgument('enable_rf2o',  default_value='true',
+        DeclareLaunchArgument('enable_rf2o',  default_value='false',
                               description='Enable RF2O laser odometry nodes.'),
         OpaqueFunction(function=_launch_setup),
     ])
