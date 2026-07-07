@@ -128,9 +128,10 @@ class LocalPlanner:
         # Select best candidate
         best = max(candidates, key=lambda c: c.score)
         
-        # If all candidates collide, stop
+        # If all candidates collide, gracefully reverse
         if best.collision:
-            return 0.0, 0.0
+            # Reversing at -0.1 m/s and turning slightly to clear
+            return -0.1, 0.2
         
         return best.linear, best.angular
     
@@ -236,7 +237,7 @@ class LocalPlanner:
                 # Bounds check
                 if (0 <= check_x < costmap.width and 
                     0 <= check_y < costmap.height):
-                    if costmap.data[check_y * costmap.width + check_x] > 50:
+                    if costmap.data[check_y * costmap.width + check_x] == 100:
                         return True
         
         return False
@@ -299,7 +300,7 @@ class LocalPlanner:
                 
                 if (0 <= check_x < costmap.width and 
                     0 <= check_y < costmap.height):
-                    if costmap.data[check_y * costmap.width + check_x] > 50:
+                    if costmap.data[check_y * costmap.width + check_x] == 100:
                         dist = math.hypot(dx, dy) * costmap.resolution
                         min_dist = min(min_dist, dist)
         

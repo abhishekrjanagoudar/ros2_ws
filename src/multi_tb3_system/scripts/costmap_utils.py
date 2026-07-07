@@ -46,11 +46,11 @@ The mapping uses the standard occupancy-grid convention:
 
 def is_occupied(cm: Costmap, row: int, col: int) -> bool:
     """
-Performs explicit bounds checking against ``cm.height`` and
-"""
+    Performs explicit bounds checking against ``cm.height`` and
+    """
     if not (0 <= row < cm.height and 0 <= col < cm.width):
         return False
-    return cm.data[row * cm.width + col] == 100
+    return cm.data[row * cm.width + col] > 50
 
 
 def build_costmap(
@@ -78,6 +78,7 @@ Constructs a square row-major occupancy grid centered on the robot
         origin_x=origin_x,
         origin_y=origin_y,
     )
+    inf_cells = max(1, round(0.22 / resolution))
     for i, r in enumerate(ranges):
         if not is_valid_return(r, range_min, range_max):
             continue
@@ -87,7 +88,16 @@ Constructs a square row-major occupancy grid centered on the robot
         cell = local_to_cell(cm, x, y)
         if cell is not None:
             row, col = cell
-            data[row * width + col] = 100
+            for dr in range(-inf_cells, inf_cells + 1):
+                for dc in range(-inf_cells, inf_cells + 1):
+                    if dr*dr + dc*dc <= inf_cells*inf_cells:
+                        r2 = row + dr
+                        c2 = col + dc
+                        if 0 <= r2 < height and 0 <= c2 < width:
+                            idx = r2 * width + c2
+                            val = 100 if (dr == 0 and dc == 0) else 80
+                            if data[idx] < val:
+                                data[idx] = val
     return cm
 
 
@@ -99,12 +109,13 @@ def segment_hits_occupied(
     y1: float,
 ) -> bool:
     """
-The segment is sampled at a spacing of at most ``resolution / 2`` so
-"""
+    The segment is sampled at a spacing of at most ``resolution / 2`` so
+    """
     dx = x1 - x0
     dy = y1 - y0
     length = math.hypot(dx, dy)
     n = max(1, math.ceil(length / (cm.resolution / 2.0)))
+    
     for k in range(n + 1):
         t = k / n
         x = x0 + t * dx

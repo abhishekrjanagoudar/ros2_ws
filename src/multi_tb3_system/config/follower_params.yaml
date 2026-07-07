@@ -38,7 +38,6 @@ follower_node:
     # Obstacle-avoidance state machine
     detour_forward_min_vel:      0.10  # forward creep maintained during DETOUR [m/s] (more assertive to clear narrow gaps)
     stationary_deadlock_timeout: 2.0   # escalate to SEARCH after this many continuous stationary seconds [s] (quicker recovery from stuck states)
-    emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
     search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
 
     # Local planner (Nav2-like obstacle avoidance)

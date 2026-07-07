@@ -15,7 +15,6 @@ class FollowerState(Enum):
 
     TRACKING = auto()
     DETOUR = auto()
-    EMERGENCY_STOP = auto()
     SEARCH = auto()
     HOLD = auto()
 
@@ -40,7 +39,6 @@ def classify_state(
     *,
     goal_blocked: bool,
     both_sides_blocked: bool,
-    safety_emergency: bool,
     hold_active: bool,
     stationary_duration_s: float,
     emergency_duration_s: float,
@@ -52,16 +50,6 @@ Inputs (all keyword-only to keep call sites self-documenting):
 """
     if hold_active:
         return FollowerState.HOLD
-
-    if safety_emergency:
-        if should_escalate_to_search(
-            stationary_duration_s,
-            emergency_duration_s,
-            deadlock_timeout_s,
-            has_unreached_breadcrumbs,
-        ):
-            return FollowerState.SEARCH
-        return FollowerState.EMERGENCY_STOP
 
     if goal_blocked:
         if both_sides_blocked:

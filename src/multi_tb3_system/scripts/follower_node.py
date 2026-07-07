@@ -51,7 +51,6 @@ class FollowerNode(Node):
         self.declare_parameter('costmap_stale_timeout', 1.0)
         self.declare_parameter('detour_forward_min_vel', 0.06)
         self.declare_parameter('stationary_deadlock_timeout', 2.0)
-        self.declare_parameter('emergency_recovery_timeout', 0.5)
         self.declare_parameter('search_angular_velocity', 0.6)
         self.declare_parameter('breadcrumb_timeout', 10.0)
         self.declare_parameter('enable_local_planner', True)
@@ -199,7 +198,6 @@ class FollowerNode(Node):
             if not self._has_ever_tracked:
                 self._controller._stationary_since = None
                 self._controller._emergency_since  = None
-                self._controller._prev_emergency   = False
             self._publish_smoothed(0.0, 0.0)
             return
 
@@ -211,7 +209,7 @@ class FollowerNode(Node):
             if self._scan_time_ns is not None else float('inf')
         )
 
-        linear_x, angular_z, _ = self._controller.step(
+        linear_x, angular_z = self._controller.step(
             pose=self._pose,
             path=self._path,
             scan=scan,

@@ -4,6 +4,8 @@ spawn_robots.launch.py — spawns N+1 TurtleBot3 robots (leader + followers).
 """
 
 from launch import LaunchDescription
+import os
+from ament_index_python.packages import get_package_share_directory
 from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
@@ -53,6 +55,7 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
             ('tf', '/tf'),
             ('tf_static', '/tf_static'),
         ],
+        ros_arguments=['--log-level', 'ERROR'],
         output='screen',
     )
 
@@ -71,21 +74,16 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
 
     actions = [spawn, rsp, bridge]
 
-    # Anchor all robot odom frames to shared map frame at spawn position so all TF trees share a root.
     static_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name=f'static_tf_map_{ns}_odom',
-        arguments=[
-            '--x', str(x), '--y', '0', '--z', '0',
-            '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
-            '--frame-id', 'map',
-            '--child-frame-id', f'{ns}/odom',
-        ],
-        parameters=[{'use_sim_time': use_sim_time}],
-        output='screen',
+        name=f'static_tf_{ns}',
+        arguments=[str(x), str(SPAWN_Y), str(SPAWN_Z), '0', '0', '0', 'world', f'{ns}/odom'],
+        output='screen'
     )
     actions.append(static_tf)
+
+
 
     # Mapless Laser Odometry
     # Launched with a delay so Gazebo/Bridge can spin up and /scan exists
@@ -108,6 +106,7 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
             ('tf', '/tf'),
             ('tf_static', '/tf_static'),
         ],
+        ros_arguments=['--log-level', 'ERROR'],
         output='screen',
     )
     actions.append(TimerAction(

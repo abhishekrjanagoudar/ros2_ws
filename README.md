@@ -43,7 +43,6 @@ Followers look ahead along the leader's path, rendering the system completely im
 | **Namespaced bridging** | `ros_gz_bridge` maps `/tbX/*` ROS topics ↔ Gazebo with no remapping |
 | **Staggered spawning** | Robots load with 3-second gaps to prevent physics instability |
 | **Synchronized follower start** | Followers begin driving 2 seconds after their robot spawns (bridge settle time) |
-| **SLAM mapping** | `slam_toolbox` online_async integration — single-robot or multi-robot mapping modes |
 
 ---
 
@@ -88,11 +87,6 @@ robot.launch.py  ⭐ ENTRY POINT (dynamic orchestrator)
 │        └── [per follower: tb2 … tbN]
 │               └── follower_node.py ◄── Pure pursuit path tracking
 │
-├── mapping.launch.py  (conditional on enable_mapping:=true)
-│        ├── slam_toolbox (async_slam_toolbox_node) ── online_async SLAM
-│        ├── nav2_map_server (map_saver_server) ────── save map on demand
-│        └── nav2_lifecycle_manager ─────────────────── manages map_saver
-│
 └── rviz.launch.py  (conditional on rviz=true / ros_ui:=true)
 ```
 ---
@@ -122,9 +116,7 @@ sudo apt install -y \
   ros-jazzy-rviz2 \
   ros-jazzy-xacro \
   ros-jazzy-tf2-tools \
-  ros-jazzy-slam-toolbox \
-  ros-jazzy-nav2-map-server \
-  ros-jazzy-nav2-lifecycle-manager
+
 ```
 
 ### Environment Setup
@@ -208,12 +200,9 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 | `gz` | bool | `false` | `true`, `false` | Show Gazebo 3D viewer window |
 | `rviz` | bool | `false` | `true`, `false` | Show RViz2 visualization |
 | `ros_ui` | bool | `false` | `true`, `false` | **Convenience override:** `true` → forces `gz=true` + `rviz=true` |
-| `enable_mapping` | bool | `false` | `true`, `false` | Start slam_toolbox for SLAM mapping |
-| `mapping_mode` | string | `online_async` | `online_async`, `online_sync` | SLAM algorithm mode |
-| `slam_robot` | string | `tb1` | `tb1`, `tb2`, `tb3`, `all` | Which robot(s) run SLAM |
+| `enable_rf2o` | bool | `true` | `true`, `false` | Enable RF2O laser odometry for high-precision tracking |
 
 
-> **`slam_robot=all`** — Runs one slam_toolbox instance per robot; each builds its own namespaced map (`/tbX/map`). Maps can later be merged using slam_toolbox's merge utility.
 
 ---
 
@@ -224,7 +213,7 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 | Topic | Type | Direction | Publisher | Subscriber |
 |---|---|:---:|---|---|
 | `/tbX/scan` | `sensor_msgs/LaserScan` | Gz → ROS | Gazebo LiDAR sensor | `follower_node` |
-| `/tbX/odom` | `nav_msgs/Odometry` | Gz → ROS | Gazebo DiffDrive | — |
+| `/tbX/odom` | `nav_msgs/Odometry` | Gz → ROS | Gazebo DiffDrive / `rf2o_laser_odometry` | `convoy_publisher` / `follower_node` |
 | `/tbX/cmd_vel` | `geometry_msgs/msg/Twist` | ROS → Gz | `teleop_controller` / `follower_node` | Gazebo DiffDrive |
 | `/tbX/joint_states` | `sensor_msgs/JointState` | Gz → ROS | Gazebo JointStatePublisher | `robot_state_publisher` |
 
@@ -262,12 +251,17 @@ ros2_ws/src/multi_tb3_system/
 │
 ├── multi_tb3_system/               (Python package)
 │   ├── __init__.py
+│   ├── perception/
+│   │   └── laser_processor.py      # Scan clustering library (future use)
 │   ├── generate_sdf.py             # Per-robot SDF topic patching (multi-robot isolation)
 │   └── launch_common.py            # ⭐ Shared config: spawn geometry, timing, helpers
 │
+├── rf2o_laser_odometry/            (C++ package)
+│   ├── src/                        # Fast 2D laser odometry implementation
+│   └── launch/                     # ROS 2 node launchers
+│
 ├── scripts/                        (Executable ROS nodes)
 │   ├── follower_node.py            # Autonomous follower (reusable for tb2, tb3, …)
-│   ├── laser_processor.py          # LaserScan → Cartesian clustering library
 │   ├── safety_controller.py        # Emergency stop + velocity limiter
 │   └── teleop_controller.py        # Burst-mode keyboard teleop for tb1
 │
@@ -277,12 +271,10 @@ ros2_ws/src/multi_tb3_system/
 │   ├── gazebo.launch.py            # Gz server + optional GUI + clock bridge
 │   ├── spawn_robots.launch.py      # Dynamic N+1 robot spawning (OpaqueFunction)
 │   ├── followers.launch.py         # Follower node launcher (OpaqueFunction)
-│   ├── mapping.launch.py           # 🗺️ SLAM mapping (slam_toolbox online_async)
 │   └── rviz.launch.py              # RViz2 visualization
 │
 ├── config/
 │   ├── follower_params.yaml        # PD gains, distances, LiDAR thresholds
-│   ├── mapping_online_async.yaml   # 🗺️ slam_toolbox params (tuned for TB3 Burger)
 │   └── cpr_office/                 # CPR Office world with custom mesh & textures
 │
 ├── worlds/
@@ -340,108 +332,8 @@ ros2 launch multi_tb3_system spawn_robots.launch.py nBurger:=2
 # Start follower nodes only (robots must already be spawned and bridged)
 ros2 launch multi_tb3_system followers.launch.py nBurger:=2
 
-# Start mapping only (system must already be running)
-ros2 launch multi_tb3_system mapping.launch.py slam_robot:=tb1
-
-# Start multi-robot mapping (attach to running system)
-ros2 launch multi_tb3_system mapping.launch.py slam_robot:=all
-
 # Open RViz only (system must already be running)
 ros2 launch multi_tb3_system rviz.launch.py
-```
-
----
-
-## 🗺️ SLAM Mapping
-
-The system integrates `slam_toolbox` (online async mode) for real-time occupancy grid mapping. Mapping supports both single-robot and multi-robot modes.
-
-### Mapping Modes
-
-| Mode | `slam_robot` | Description |
-|---|:---:|---|
-| **Single-robot** | `tb1` (default) | One slam_toolbox instance uses tb1's LiDAR. Publishes to `/map`. TF: `map → tb1/odom` |
-| **Multi-robot** | `all` | One slam_toolbox per robot. Each publishes `/tbX/map`. TF: `tbX/map → tbX/odom` |
-
-### How It Works
-
-```
-                    ┌─────────────────────────────────────┐
-                    │         mapping.launch.py           │
-                    └─────────────────────────────────────┘
-                                    │
-              ┌─────────────────────┼─────────────────────┐
-              ▼                     ▼                     ▼
-    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-    │  slam_toolbox    │  │  map_saver_server │  │lifecycle_manager │
-    │  (per robot)     │  │  (save on demand) │  │  (manages saver) │
-    │                  │  │                  │  │                  │
-    │  /tbX/scan ──►   │  │  /map_save srv   │  │  autostart=true  │
-    │  publishes /map  │  │                  │  │                  │
-    └──────────────────┘  └──────────────────┘  └──────────────────┘
-```
-
-### Quick Start — Mapping
-
-```bash
-# Step 1: Launch system with mapping enabled
-ros2 launch multi_tb3_system robot.launch.py enable_mapping:=true ros_ui:=true
-
-# Step 2: Teleoperate tb1 to explore the environment
-ros2 run multi_tb3_system teleop_controller.py --ros-args -r __ns:=/tb1
-
-# Step 3: Save the map when done exploring
-ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
-```
-
-The saved map consists of two files:
-- `my_map.pgm` — occupancy grid image
-- `my_map.yaml` — metadata (resolution, origin, thresholds)
-
-### Multi-Robot Mapping
-
-When `slam_robot:=all`, each robot builds its own map independently:
-
-```bash
-ros2 launch multi_tb3_system robot.launch.py enable_mapping:=true slam_robot:=all ros_ui:=true
-```
-
-| Robot | Map Topic | Map Frame | Scan Source |
-|---|---|---|---|
-| tb1 | `/tb1/map` | `tb1/map` | `/tb1/scan` |
-| tb2 | `/tb2/map` | `tb2/map` | `/tb2/scan` |
-| tb3 | `/tb3/map` | `tb3/map` | `/tb3/scan` |
-
-Maps can later be merged using:
-```bash
-ros2 launch slam_toolbox merge_maps_kinematic_launch.py
-```
-
-### Mapping Parameters
-
-Tunable in [`config/mapping_online_async.yaml`](config/mapping_online_async.yaml):
-
-| Parameter | Default | Description |
-|---|:---:|---|
-| `resolution` | `0.05` | Map cell size (m/pixel) |
-| `max_laser_range` | `3.5` | LDS-01 max range (m) |
-| `min_laser_range` | `0.12` | LDS-01 min range (m) |
-| `minimum_travel_distance` | `0.3` | Min distance (m) before new scan is processed |
-| `minimum_travel_heading` | `0.3` | Min rotation (rad) before new scan is processed |
-| `map_update_interval` | `3.0` | Seconds between map publications |
-| `do_loop_closing` | `true` | Enable loop closure detection |
-| `loop_search_maximum_distance` | `3.0` | Max distance (m) for loop closure search |
-
-### Standalone Mapping (Without Full System)
-
-If the convoy is already running, you can attach mapping separately:
-
-```bash
-# Single robot — subscribe to tb1's existing /tb1/scan
-ros2 launch multi_tb3_system mapping.launch.py slam_robot:=tb1
-
-# All robots
-ros2 launch multi_tb3_system mapping.launch.py slam_robot:=all
 ```
 
 ---
@@ -472,20 +364,6 @@ ros2 launch multi_tb3_system robot.launch.py ros_ui:=true
 # Then in another terminal:
 ros2 node list | grep follower
 ros2 node info /tb2/follower_node
-
-# ── Mapping-specific debugging ────────────────────────────────────────
-
-# Check if slam_toolbox is running
-ros2 node list | grep slam_toolbox
-
-# Verify map is being published
-ros2 topic echo /map --once
-
-# Check slam_toolbox TF (should show map → tb1/odom)
-ros2 run tf2_tools view_frames
-
-# Monitor map update rate
-ros2 topic hz /map
 ```
 
 ---
@@ -554,28 +432,6 @@ Check the staggered timing:
 
 Wait at least 12 seconds after launch before checking. If still no followers after 15s, check launch terminal for errors in `followers.launch.py` OpaqueFunction.
 
-### Mapping: no `/map` topic or empty map
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| No `/map` topic | slam_toolbox not started | Verify `enable_mapping:=true` or launch `mapping.launch.py` standalone |
-| `/map` exists but empty | No scan data arriving | Check `ros2 topic hz /tb1/scan` — if 0 Hz, bridge or SDF issue |
-| Map doesn't grow | Robot not moving enough | slam_toolbox requires `minimum_travel_distance` (0.3m) of motion between scans |
-| TF error in RViz for map | Wrong fixed frame | Set RViz fixed frame to `map` (single) or `tb1/map` (multi) |
-| Multi-robot: maps overlap incorrectly | TF tree conflict | Each robot uses `tbX/map` frame — ensure RViz displays the correct one |
-
-```bash
-# Verify slam_toolbox is receiving scans
-ros2 topic hz /tb1/scan
-
-# Check slam_toolbox node is alive and configured
-ros2 node info /slam_toolbox   # single-robot mode
-ros2 node info /tb1/slam_toolbox  # multi-robot mode
-
-# Force-save a map snapshot
-ros2 run nav2_map_server map_saver_cli -f /tmp/debug_map
-```
-
 ---
 
 ## 📚 Additional Documentation
@@ -583,7 +439,6 @@ ros2 run nav2_map_server map_saver_cli -f /tmp/debug_map
 - **[`DOCUMENTATION.md`](DOCUMENTATION.md)** — Detailed system architecture, data flow, component descriptions
 - **[`LAUNCH_CLEANUP.md`](LAUNCH_CLEANUP.md)** — What was deleted in v0.2.0, migration guide, before/after examples
 - **[`config/follower_params.yaml`](config/follower_params.yaml)** — Follower tuning parameters with defaults
-- **[`config/mapping_online_async.yaml`](config/mapping_online_async.yaml)** — slam_toolbox SLAM parameters (tuned for TB3)
 - **`scripts/*.py`** — Source code with extensive docstrings
 
 ---
@@ -617,14 +472,11 @@ ros2 run nav2_map_server map_saver_cli -f /tmp/debug_map
 | **Gazebo** | Harmonic (gz-sim 8.x) |
 | **Python** | 3.12 |
 
-### What's New in v0.3.0
-
-- **SLAM mapping** — `slam_toolbox` online_async integration via `mapping.launch.py`
-- **Single-robot mapping** — Teleoperate tb1 to build an occupancy grid map
-- **Multi-robot mapping** — `slam_robot:=all` runs per-robot slam_toolbox instances with namespaced maps
-- **Map saving** — Integrated `nav2_map_server` map_saver_server for on-demand map persistence
-- **New launch args** — `enable_mapping`, `mapping_mode`, `slam_robot` on `robot.launch.py`
-- **Mapping config** — `config/mapping_online_async.yaml` tuned for TurtleBot3 Burger LDS-01 (0.12–3.5m)
+### RF2O Laser Odometry Integration
+The workspace now includes the `rf2o_laser_odometry` package. When `enable_rf2o:=true` is used:
+- Each robot runs a dedicated `rf2o_laser_odometry_node`.
+- Wheel odometry from Gazebo is augmented/replaced with high-frequency, high-precision laser-based planar odometry.
+- This mitigates drift caused by wheel slip during Pure Pursuit sharp turns.
 
 ### What's New in v0.2.0
 

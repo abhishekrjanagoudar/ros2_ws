@@ -16,6 +16,7 @@ from costmap_utils import (
 )
 from convoy_tracking import (
     compute_goal_point,
+    get_path_index_by_gap,
     should_hold,
 )
 from follower_state import (
@@ -115,10 +116,10 @@ Stateful Pure Pursuit + state-machine convoy follower.
                 velocity_samples=10,  # More samples for better paths
                 angular_samples=15,   # More angular samples for narrow gaps
                 predict_time=1.5,
-                robot_radius=0.25,
-                goal_weight=1.0,
-                velocity_weight=0.3,  # Favor moving forward
-                obstacle_weight=2.5,  # Strong obstacle avoidance
+                robot_radius=0.12,    # Physical radius of TB3 Burger
+                goal_weight=0.8,      # Reduced to allow detours
+                velocity_weight=1.5,  # Increased strongly to prevent freezing (keep moving!)
+                obstacle_weight=3.0,  # Increased to keep wider berth
                 control_period=0.05,
             )
 
@@ -126,7 +127,6 @@ Stateful Pure Pursuit + state-machine convoy follower.
         self._last_closest_idx:  int            = 0
         self._stationary_since:  Optional[int]  = None   # wall-clock ns
         self._emergency_since:   Optional[int]  = None   # wall-clock ns
-        self._prev_emergency:    bool            = False
         self._state_for_timer_reset: FollowerState = FollowerState.TRACKING
         self._last_newest_time_ns: int          = 0      # ns since epoch
 
@@ -145,7 +145,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
         scan,                               # sensor_msgs/LaserScan or None
         scan_age_s: float,                  # seconds since scan was received
         now_ns: int,                        # current wall-clock time [ns]
-    ) -> Tuple[float, float, bool]:
+    ) -> Tuple[float, float]:
         """
 Compute one control cycle.
 """
@@ -173,14 +173,7 @@ Compute one control cycle.
 
         # Goal point: arc-length `gap` back from path end
         goal = compute_goal_point(path, self._gap)
-        goal_idx = 0
-        acc = 0.0
-        for i in range(len(path) - 1, 0, -1):
-            acc += math.hypot(path[i][0] - path[i - 1][0],
-                              path[i][1] - path[i - 1][1])
-            if acc >= self._gap:
-                goal_idx = i - 1
-                break
+        goal_idx = get_path_index_by_gap(path, self._gap)
 
         # Path-length guard (P4)
         path_too_short = (
@@ -226,7 +219,10 @@ Compute one control cycle.
 
         # LiDAR Target Tracking
         if scan_for_safety is not None and len(path) > 0:
-            expected_local_x, expected_local_y = to_robot_frame(path[-1][0], path[-1][1], rx, ry, ryaw)
+            target_gap = max(0.0, self._gap - self.safety.predecessor_gap)
+            target_idx = get_path_index_by_gap(path, target_gap)
+
+            expected_local_x, expected_local_y = to_robot_frame(path[target_idx][0], path[target_idx][1], rx, ry, ryaw)
             rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
             target_cluster, _ = process_scan(
                 ranges=list(scan_for_safety.ranges),
@@ -241,6 +237,11 @@ Compute one control cycle.
                 err_x = target_cluster.centroid_x - expected_local_x
                 err_y = target_cluster.centroid_y - expected_local_y
                 
+                # Clamp the error to prevent massive goal shifts if an obstacle is misidentified as a robot
+                # Increased clamp to 0.6m to allow full recovery of large tracking errors or drift
+                err_x = max(-0.6, min(0.6, err_x))
+                err_y = max(-0.6, min(0.6, err_y))
+                
                 # Apply an EMA filter to the offset to prevent violent swerves (alpha = 0.1)
                 if not hasattr(self, '_ema_err_x'):
                     self._ema_err_x = err_x
@@ -248,10 +249,19 @@ Compute one control cycle.
                 else:
                     self._ema_err_x = 0.1 * err_x + 0.9 * self._ema_err_x
                     self._ema_err_y = 0.1 * err_y + 0.9 * self._ema_err_y
-                
-                # Shift the goal by the smoothed physical error to eliminate drift!
+            
+            # ALWAYS shift the goal by the smoothed physical error (if it exists) to eliminate drift!
+            # Even if the target is occluded this frame, the odometry drift hasn't vanished.
+            if hasattr(self, '_ema_err_x'):
                 gx_local += self._ema_err_x
                 gy_local += self._ema_err_y
+                lx += self._ema_err_x
+                ly += self._ema_err_y
+                # Recalculate pure pursuit variables with corrected lookahead
+                Ld = max(math.hypot(lx, ly), 1e-3)
+                alpha = math.atan2(ly, lx)
+                # Recalculate distance to goal so it doesn't stop prematurely based on drifted odometry!
+                dist_to_goal = math.hypot(gx_local, gy_local)
 
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:
@@ -280,6 +290,12 @@ Compute one control cycle.
 
         # State-machine inputs
         blocked              = is_goal_blocked(cm, gx_local, gy_local)
+        
+        # Hysteresis: If we were in DETOUR, keep DETOUR active until we are facing the clear goal
+        if self._state_for_timer_reset == FollowerState.DETOUR and not blocked:
+            if abs(alpha) > 0.4:
+                blocked = True
+                
         left_free, right_free = free_counts_per_side(cm)
         both_blocked         = (left_free == 0 and right_free == 0)
 
@@ -302,14 +318,10 @@ Compute one control cycle.
             if self._emergency_since is not None else 0.0
         )
 
-        # safety_emergency_now is resolved by check_and_modify_ex() below
-        safety_emergency_now = False
-
         # Classify next state
         state = classify_state(
             goal_blocked=blocked,
             both_sides_blocked=both_blocked,
-            safety_emergency=safety_emergency_now,
             hold_active=hold,
             stationary_duration_s=stationary_duration,
             emergency_duration_s=emergency_duration,
@@ -317,9 +329,13 @@ Compute one control cycle.
             has_unreached_breadcrumbs=has_unreached,
         )
 
+        # LATCH the SEARCH state so escape maneuvers (backing up) aren't cancelled after 1 frame
+        if hasattr(self, '_search_until') and self._search_until > now_ns:
+            state = FollowerState.SEARCH
+        elif state == FollowerState.SEARCH:
+            self._search_until = now_ns + int(1.5 * 1e9)  # Escape for 1.5 seconds
+
         if state == FollowerState.HOLD:
-            base_linear, base_angular = 0.0, 0.0
-        elif state == FollowerState.EMERGENCY_STOP:
             base_linear, base_angular = 0.0, 0.0
         elif state == FollowerState.SEARCH:
             base_linear, base_angular = build_search_command(
@@ -375,13 +391,12 @@ Compute one control cycle.
         elif self._state_for_timer_reset == FollowerState.TRACKING:
             # Only reset when cleanly back in TRACKING, not on momentary
             self._emergency_since = None
-        self._prev_emergency = safety_emergency_now
 
         # Stationary-duration timer
         self._pending_linear_for_stationary = linear_x
 
         self._state_for_timer_reset = state
-        return linear_x, angular_z, safety_emergency_now
+        return linear_x, angular_z
 
     def update_stationary_timer(self, actual_linear: float, now_ns: int) -> None:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""

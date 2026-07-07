@@ -230,6 +230,10 @@ void CLaserOdometry2DNode::publish()
   odom.twist.twist.linear.x = rf2o_ref.lin_speed;    //linear speed
   odom.twist.twist.linear.y = 0.0;
   odom.twist.twist.angular.z = rf2o_ref.ang_speed;   //angular speed
+  
+  // Clear covariance to prevent uninitialized memory NaNs crashing python subscribers
+  odom.pose.covariance.fill(0.0);
+  odom.twist.covariance.fill(0.0);
   //publish the message
   odom_pub->publish(odom);
 

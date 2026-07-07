@@ -44,6 +44,28 @@ The newest breadcrumb is ``path[-1]``. The function walks the path
     return path[0]
 
 
+def get_path_index_by_gap(
+    path: list[tuple[float, float]],
+    gap: float,
+) -> int:
+    """
+    Returns the index of the path waypoint that is at least `gap` arc-length
+    away from the end of the path. Returns len(path) - 1 if gap <= 0.
+    """
+    if len(path) < 2 or gap <= 0.0:
+        return len(path) - 1
+    
+    accumulated = 0.0
+    for i in range(len(path) - 1, 0, -1):
+        x_new, y_new = path[i]
+        x_old, y_old = path[i - 1]
+        accumulated += math.hypot(x_new - x_old, y_new - y_old)
+        if accumulated >= gap:
+            return i - 1
+    
+    return 0
+
+
 def goal_reached(
     rx: float,
     ry: float,
