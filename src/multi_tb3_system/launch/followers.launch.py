@@ -40,6 +40,26 @@ def _launch_setup(context, *args, **kwargs):
     FOLLOWER1_START   = 1.00   # tb2 follower node
     FOLLOWER2_START   = 1.25   # tb3 follower node — 0.5s after tb2
 
+    # Per-robot costmap_generator (tb1, tb2, tb3, ...)
+    for i in range(1, n_burgers + 2):
+        ns = f'tb{i}'
+        cg_node = Node(
+            package='multi_tb3_system',
+            executable='costmap_generator.py',
+            name='costmap_generator',
+            namespace=ns,
+            parameters=[
+                params_file,
+                {
+                    'use_sim_time':       use_sim_time,
+                    'enable_costmap_viz': enable_viz,
+                },
+            ],
+            output='screen',
+            emulate_tty=True,
+        )
+        actions.append(TimerAction(period=COSTMAP_START, actions=[cg_node]))
+
     # Leader trajectory publishers (all except the last robot)
     for i in range(1, n_burgers + 1):
         ns = f'tb{i}'
