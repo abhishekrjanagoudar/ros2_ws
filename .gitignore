@@ -17,3 +17,5 @@ GEMINI.md
 .cursorrules
 .windsurfrules
 ROS2/
+.agents/
+.pytest_cache/

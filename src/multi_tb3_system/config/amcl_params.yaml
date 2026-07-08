@@ -1,0 +1,69 @@
+tb2:
+  amcl:
+    ros__parameters:
+      use_sim_time: true
+      alpha1: 0.1
+      alpha2: 0.1
+      alpha3: 0.1
+      alpha4: 0.1
+      alpha5: 0.1
+      base_frame_id: "base_footprint" # Overridden in launch
+      odom_frame_id: "odom" # Overridden in launch
+      global_frame_id: "map"
+      scan_topic: "scan" # Subscribed in relative namespace
+      map_topic: "/map"  # Shared global map
+      max_beams: 60
+      max_particles: 5000
+      min_particles: 1000
+      pf_err: 0.05
+      pf_z: 0.99
+      recovery_alpha_fast: 0.0
+      recovery_alpha_slow: 0.0
+      resample_interval: 1
+      robot_model_type: "nav2_amcl::DifferentialMotionModel"
+      save_pose_rate: 0.5
+      sigma_hit: 0.2
+      tf_broadcast: true
+      transform_tolerance: 0.2
+      update_min_a: 0.02
+      update_min_d: 0.02
+      z_hit: 0.5
+      z_max: 0.05
+      z_rand: 0.5
+      z_short: 0.05
+      always_reset_initial_pose: false
+
+tb3:
+  amcl:
+    ros__parameters:
+      use_sim_time: true
+      alpha1: 0.1
+      alpha2: 0.1
+      alpha3: 0.1
+      alpha4: 0.1
+      alpha5: 0.1
+      base_frame_id: "base_footprint" # Overridden in launch
+      odom_frame_id: "odom" # Overridden in launch
+      global_frame_id: "map"
+      scan_topic: "scan" # Subscribed in relative namespace
+      map_topic: "/map"  # Shared global map
+      max_beams: 60
+      max_particles: 5000
+      min_particles: 1000
+      pf_err: 0.05
+      pf_z: 0.99
+      recovery_alpha_fast: 0.0
+      recovery_alpha_slow: 0.0
+      resample_interval: 1
+      robot_model_type: "nav2_amcl::DifferentialMotionModel"
+      save_pose_rate: 0.5
+      sigma_hit: 0.2
+      tf_broadcast: true
+      transform_tolerance: 0.2
+      update_min_a: 0.02
+      update_min_d: 0.02
+      z_hit: 0.5
+      z_max: 0.05
+      z_rand: 0.5
+      z_short: 0.05
+      always_reset_initial_pose: false

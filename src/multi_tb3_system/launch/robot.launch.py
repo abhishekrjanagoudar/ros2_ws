@@ -16,6 +16,7 @@ from launch.actions import (
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
 
 
 def _resolve_ui_flags(context, *args, **kwargs):
@@ -26,6 +27,10 @@ def _resolve_ui_flags(context, *args, **kwargs):
     nBurger        = LaunchConfiguration('nBurger').perform(context)
     world          = LaunchConfiguration('world').perform(context)
     use_sim_time   = LaunchConfiguration('use_sim_time').perform(context)
+    enable_followers = LaunchConfiguration('enable_followers').perform(context)
+    enable_rf2o    = LaunchConfiguration('enable_rf2o').perform(context)
+    slam           = LaunchConfiguration('slam').perform(context)
+    enable_amcl    = LaunchConfiguration('enable_amcl').perform(context)
 
     # ros_ui=true → both GUIs on. ros_ui=false (default) → respect individual gz/rviz flags.
     if ros_ui == 'true':
@@ -48,11 +53,34 @@ def _resolve_ui_flags(context, *args, **kwargs):
 
     actions = [
         _include('worlds.launch.py',       {'world': world, 'gz': effective_gz}),
-        _include('spawn_robots.launch.py', {'nBurger': nBurger}),
-        _include('followers.launch.py',    {'nBurger': nBurger, 'rviz': effective_rviz}),
+        _include('spawn_robots.launch.py', {'nBurger': nBurger, 'enable_rf2o': enable_rf2o}),
     ]
+    if enable_followers == 'true':
+        actions.append(_include('followers.launch.py', {
+            'nBurger': nBurger,
+            'rviz': effective_rviz,
+            'enable_amcl': enable_amcl
+        }))
+    
     if effective_rviz == 'true':
         actions.append(_include('rviz.launch.py'))
+
+    if slam == 'true':
+        slam_params_file = os.path.join(pkg, 'config', 'slam_params.yaml')
+        actions.append(Node(
+            package='slam_toolbox',
+            executable='async_slam_toolbox_node',
+            name='slam_toolbox',
+            namespace='tb1',
+            parameters=[slam_params_file, {'use_sim_time': use_sim_time == 'true'}],
+            output='screen',
+            remappings=[
+                ('/map', '/tb1/map'),
+                ('/map_metadata', '/tb1/map_metadata'),
+                ('/tf', '/tf'),
+                ('/tf_static', '/tf_static'),
+            ]
+        ))
 
     return actions
 
@@ -75,6 +103,14 @@ def generate_launch_description() -> LaunchDescription:
                               description="Show RViz2. Overridden by ros_ui."),
         DeclareLaunchArgument('ros_ui',       default_value='false',
                               description="'true' → gz=true + rviz=true. Overrides gz and rviz."),
+        DeclareLaunchArgument('enable_followers', default_value='true',
+                              description="Include followers.launch.py (Costmaps, Convoy Publisher, Followers)."),
+        DeclareLaunchArgument('enable_rf2o', default_value='true',
+                              description="Enable RF2O laser odometry nodes."),
+        DeclareLaunchArgument('slam', default_value='true',
+                              description="Enable SLAM for tb1."),
+        DeclareLaunchArgument('enable_amcl', default_value='true',
+                              description="Enable AMCL localization for followers."),
 
         # Expose TurtleBot3 mesh assets to Gazebo
         AppendEnvironmentVariable(

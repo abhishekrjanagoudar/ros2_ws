@@ -34,6 +34,26 @@ SPEED_BINDINGS = {
 
 MSG = """
 ╔════════════════════════════════════════════════════╗
+║             Burst-Mode Teleop Controller           ║
+╠════════════════════════════════════════════════════╣
+║                                                    ║
+║  Moving around (Hold key to move):                 ║
+║        w                        i                  ║
+║   a    s    d      OR      j    k    l             ║
+║        x                        ,                  ║
+║                                                    ║
+║  w/i : Forward                                     ║
+║  x/, : Backward                                    ║
+║  a/j : Turn Left                                   ║
+║  d/l : Turn Right                                  ║
+║  s/k : Force Stop                                  ║
+║                                                    ║
+║  Speed Control:                                    ║
+║  q/z : Increase / Decrease all speeds by 10%       ║
+║  e/c : Increase / Decrease angular speed by 10%    ║
+║                                                    ║
+║  CTRL-C to quit                                    ║
+╚════════════════════════════════════════════════════╝
 """
 
 SPEED_MSG = "\rLinear: {lin:.2f} m/s  |  Angular: {ang:.2f} rad/s    "

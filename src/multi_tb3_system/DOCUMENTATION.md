@@ -56,15 +56,16 @@ Three TurtleBot3 Burger robots form a leader–follower convoy using a **Path-Ba
 ```
 ros2_ws/src/multi_tb3_system/
 │
-├── multi_tb3_system/                   (Python package — imported by launch files)
+│   ├── multi_tb3_system/               (Python package — imported by launch files)
 │   ├── __init__.py
 │   ├── generate_sdf.py                 # Per-robot SDF topic patching (called at launch time)
-│   └── launch_common.py               # ⭐ Shared config: geometry, timing, helpers
+│   ├── launch_common.py               # ⭐ Shared config: geometry, timing, helpers
+│   └── perception/
+│       └── laser_processor.py         # Scan clustering library (future use)
 │
 ├── scripts/                            (Executable ROS nodes)
 │   ├── convoy_publisher.py             # Publishes leader trajectory as nav_msgs/Path (10 Hz)
 │   ├── follower_node.py                # Pure Pursuit path follower (50 Hz timer)
-│   ├── laser_processor.py             # Scan → Cartesian clustering library (NOT used by follower_node)
 │   ├── safety_controller.py           # Emergency stop + steering bias (used by follower_node)
 │   └── teleop_controller.py           # Burst-mode keyboard teleop for tb1
 │
@@ -435,7 +436,7 @@ Shared configuration module. The single source of truth for spawn geometry and t
 
 ---
 
-### 6.3 `scripts/laser_processor.py`
+### 6.3 `multi_tb3_system/perception/laser_processor.py`
 
 Pure-geometry library. **Not used by `follower_node.py`** — left in the repository for potential future use. The follower passes raw scan data directly to `SafetyController`.
 

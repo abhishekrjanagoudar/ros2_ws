@@ -3,22 +3,22 @@
 follower_node:
   ros__parameters:
 
-    leader_ns:            'tb1'   # namespace publishing /<leader_ns>/convoy_path
+    leader_ns:            'tb1'   # default namespace; overridden at launch
 
     # Convoy spacing
-    convoy_spacing:       0.6     # gap per convoy slot [m] (tb2=1x=0.6m, tb3=2x=1.2m)
+    convoy_spacing:       0.6     # gap to immediate leader [m] (tb2 tracks tb1, tb3 tracks tb2)
     goal_tolerance:       0.12    # stop when within this distance of goal [m] (realistic for 20 Hz + slew limits)
 
     # Pure Pursuit
-    lookahead_distance:   0.25    # lookahead point distance along the path [m] — must be < gap/2 (gap = convoy_spacing × (slot-1))
-    kp_linear:            0.6     # forward speed gain on spacing error
-    kp_angular:           1.8     # heading gain (large-misalignment recovery)
+    lookahead_distance:   0.35    # lookahead point distance along the path [m] — decreased to tightly follow sharp corners
+    kp_linear:            0.8     # forward speed gain on spacing error
+    kp_angular:           2.8     # heading gain (increased for sharper turning recovery)
 
     # Limits
     max_linear_velocity:  0.22    # TB3 Burger hardware limit
     max_angular_velocity: 1.0
     # LiDAR hard-stop distance (SafetyController) [m]
-    safe_distance:        0.15
+    safe_distance:        0.20    # Emergency stop distance - doubled from 0.15m for safety margin
 
     # Convoy predecessor filtering
     predecessor_gap:      0.6     # must equal convoy_spacing [m]
@@ -32,13 +32,11 @@ follower_node:
     # Local costmap (LiDAR-derived occupancy grid)
     costmap_size:                3.0   # span of square local costmap [m]
     costmap_resolution:          0.05  # cell size [m] (3.0/0.05 = 60x60 = 3600 cells)
-    costmap_publish_rate:        10.0  # Hz (>=5 Hz) — informational; in-process build runs each control cycle
     costmap_stale_timeout:       1.0   # clear costmap if no new scan within this many seconds
 
     # Obstacle-avoidance state machine
     detour_forward_min_vel:      0.10  # forward creep maintained during DETOUR [m/s] (more assertive to clear narrow gaps)
-    stationary_deadlock_timeout: 3.5   # escalate to SEARCH after this many continuous stationary seconds [s] (give DETOUR time to work)
-    emergency_recovery_timeout:  0.5   # informational — resume window after emergency clears [s]
+    stationary_deadlock_timeout: 2.0   # escalate to SEARCH after this many continuous stationary seconds [s] (quicker recovery from stuck states)
     search_angular_velocity:     0.9   # rotate-in-place rate during SEARCH [rad/s] (<= max_angular_velocity; faster sweep finds clear heading sooner)
 
     # Persistent leader tracking

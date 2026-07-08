@@ -42,6 +42,21 @@ class ConvoyPublisher(Node):
         self.path_msg = Path()
         self.path_msg.header.frame_id = self.frame
 
+        # Pre-fill path backwards to cover follower spawn points instantly
+        backfill_distance = 3.0
+        num_points = int(backfill_distance / self.resolution)
+        for i in range(num_points, 0, -1):
+            p = PoseStamped()
+            p.header.frame_id = self.frame
+            p.pose.position.x = float(self.off_x - (i * self.resolution))
+            p.pose.position.y = float(self.off_y)
+            p.pose.position.z = 0.0
+            p.pose.orientation.x = 0.0
+            p.pose.orientation.y = 0.0
+            p.pose.orientation.z = 0.0
+            p.pose.orientation.w = 1.0
+            self.path_msg.poses.append(p)
+
         # Publish path at 50 Hz to match follower control loops
         self.timer = self.create_timer(0.02, self.publish_path)
 
@@ -53,12 +68,12 @@ class ConvoyPublisher(Node):
 
     def odom_callback(self, msg: Odometry):
         pose = PoseStamped()
-        pose.header = msg.header
+        pose.header.stamp = msg.header.stamp
         pose.header.frame_id = self.frame
-        pose.pose = msg.pose.pose
-        # Shift leader odom into the shared world frame.
-        pose.pose.position.x += self.off_x
-        pose.pose.position.y += self.off_y
+        pose.pose.position.x = float(msg.pose.pose.position.x + self.off_x)
+        pose.pose.position.y = float(msg.pose.pose.position.y + self.off_y)
+        pose.pose.position.z = float(msg.pose.pose.position.z)
+        pose.pose.orientation = msg.pose.pose.orientation
 
         if not self.path_msg.poses:
             self.path_msg.poses.append(pose)

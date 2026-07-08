@@ -11,8 +11,9 @@ from typing import List, Optional, Tuple
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import Twist, TransformStamped
+from tf2_ros import TransformBroadcaster
+from nav_msgs.msg import Odometry, Path, OccupancyGrid
 from sensor_msgs.msg import LaserScan
 
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +37,7 @@ class FollowerNode(Node):
         self.declare_parameter('kp_angular', 1.5)
         self.declare_parameter('max_linear_velocity', 0.22)
         self.declare_parameter('max_angular_velocity', 1.0)
-        self.declare_parameter('safe_distance', 0.15)  # must be strictly < convoy_spacing (0.5 m) so the robot ahead at the nominal gap does not trigger an emergency stop
+        self.declare_parameter('safe_distance', 0.20)  # Emergency stop distance - must be < convoy_spacing (0.6m) to allow normal following
         self.declare_parameter('predecessor_gap', 0.6)
         self.declare_parameter('control_frequency', 20.0)  # Hz — must match follower_params.yaml
         self.declare_parameter('max_linear_accel', 1.0)
@@ -47,13 +48,13 @@ class FollowerNode(Node):
 
         self.declare_parameter('costmap_size', 3.0)
         self.declare_parameter('costmap_resolution', 0.05)
-        self.declare_parameter('costmap_publish_rate', 10.0)
         self.declare_parameter('costmap_stale_timeout', 1.0)
         self.declare_parameter('detour_forward_min_vel', 0.06)
         self.declare_parameter('stationary_deadlock_timeout', 2.0)
-        self.declare_parameter('emergency_recovery_timeout', 0.5)
         self.declare_parameter('search_angular_velocity', 0.6)
         self.declare_parameter('breadcrumb_timeout', 10.0)
+        self.declare_parameter('enable_costmap_viz', False)
+        self.declare_parameter('costmap_frame', '')
 
         gp = lambda n: self.get_parameter(n).value
 
@@ -121,6 +122,10 @@ class FollowerNode(Node):
         # Tracks whether the control loop has successfully run at least once.
         self._has_ever_tracked: bool = False
 
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.tf_corr_x = 0.0
+        self.tf_corr_y = 0.0
+
         # Output smoothing state
         self._last_lin: float = 0.0
         self._last_ang: float = 0.0
@@ -138,9 +143,20 @@ class FollowerNode(Node):
                                  self._path_cb, 10)
         self.create_subscription(LaserScan,  'scan',
                                  self._scan_cb, qos)
+                                 
+        self.enable_viz = bool(gp('enable_costmap_viz'))
+        self.costmap_frame = str(gp('costmap_frame'))
+        if self.enable_viz:
+            costmap_qos = QoSProfile(
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.VOLATILE,
+            )
+            self.costmap_pub = self.create_publisher(OccupancyGrid, 'local_costmap', costmap_qos)
+
         self.create_timer(self._dt, self._control_loop)
 
-        gap = (slot - 1) * float(gp('convoy_spacing'))
+        gap = float(gp('convoy_spacing'))
         self.get_logger().info(
             f"Path-follower tb{slot} | gap={gap:.2f}m | "
             f"lookahead={gp('lookahead_distance'):.2f}m | "
@@ -159,8 +175,8 @@ class FollowerNode(Node):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         self._pose = (
-            p.x + self.off_x,
-            p.y + self.off_y,
+            p.x + self.off_x + self.tf_corr_x,
+            p.y + self.off_y + self.tf_corr_y,
             yaw_from_quaternion(q),
         )
 
@@ -192,12 +208,24 @@ class FollowerNode(Node):
     # Control loop
 
     def _control_loop(self) -> None:
+        # Broadcast the dynamic world -> <namespace>/odom TF unconditionally
+        # so RViz can see the robot even before tracking starts.
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'world'
+        ns = self.get_namespace().strip('/')
+        t.child_frame_id = f'{ns}/odom'
+        t.transform.translation.x = float(self.off_x + self.tf_corr_x)
+        t.transform.translation.y = float(self.off_y + self.tf_corr_y)
+        t.transform.translation.z = 0.0
+        t.transform.rotation.w = 1.0
+        self.tf_broadcaster.sendTransform(t)
+
         if self._pose is None or len(self._path) < 2:
             # Nothing to track yet — publish zero.
             if not self._has_ever_tracked:
                 self._controller._stationary_since = None
                 self._controller._emergency_since  = None
-                self._controller._prev_emergency   = False
             self._publish_smoothed(0.0, 0.0)
             return
 
@@ -209,7 +237,7 @@ class FollowerNode(Node):
             if self._scan_time_ns is not None else float('inf')
         )
 
-        linear_x, angular_z, _ = self._controller.step(
+        linear_x, angular_z = self._controller.step(
             pose=self._pose,
             path=self._path,
             scan=scan,
@@ -217,10 +245,43 @@ class FollowerNode(Node):
             now_ns=now_ns,
         )
 
+        # Update TF correction if raw error is available
+        if hasattr(self._controller, '_raw_err_x'):
+            err_x = self._controller._raw_err_x
+            err_y = self._controller._raw_err_y
+            del self._controller._raw_err_x
+            del self._controller._raw_err_y
+            
+            # Rotate local error to world frame
+            ryaw = self._pose[2]
+            err_world_x = err_x * math.cos(ryaw) - err_y * math.sin(ryaw)
+            err_world_y = err_x * math.sin(ryaw) + err_y * math.cos(ryaw)
+            
+            # Accumulate with small gain (0.05) to avoid violent jumping
+            self.tf_corr_x -= err_world_x * 0.05
+            self.tf_corr_y -= err_world_y * 0.05
+
         self._publish_smoothed(linear_x, angular_z)
+        
+        if self.enable_viz and hasattr(self._controller, 'last_costmap'):
+            self._publish_costmap(self._controller.last_costmap)
 
         # Stationary timer uses the post-slew actual command (self._last_lin).
         self._controller.update_stationary_timer(self._last_lin, now_ns)
+
+    def _publish_costmap(self, cm) -> None:
+        msg = OccupancyGrid()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.costmap_frame or (self._scan.header.frame_id if self._scan is not None else 'base_scan')
+        msg.info.resolution = float(cm.resolution)
+        msg.info.width = int(cm.width)
+        msg.info.height = int(cm.height)
+        msg.info.origin.position.x = float(cm.origin_x)
+        msg.info.origin.position.y = float(cm.origin_y)
+        msg.info.origin.position.z = 0.0
+        msg.info.origin.orientation.w = 1.0
+        msg.data = list(cm.data)
+        self.costmap_pub.publish(msg)
 
     # Output smoothing
 

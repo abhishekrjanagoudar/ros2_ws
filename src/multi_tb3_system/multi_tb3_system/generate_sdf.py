@@ -10,6 +10,13 @@ from ament_index_python.packages import get_package_share_directory
 
 logger = logging.getLogger(__name__)
 
+# Individual Wheel Calibrations
+WHEEL_CONFIGS = {
+    'tb1': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
+    'tb2': {'wheel_radius': 0.0320, 'wheel_separation': 0.1617},
+    'tb3': {'wheel_radius': 0.0320, 'wheel_separation': 0.1779},
+}
+
 # Topic replacement map
 
 _TOPIC_PATCHES = [
@@ -27,10 +34,10 @@ _TOPIC_PATCHES = [
     (r'<tf_topic>/tf</tf_topic>',    '<tf_topic>/tf</tf_topic>'),   # keep global
 
     # Frame IDs (published in odometry message header)
-    (r'<frame_id>odom</frame_id>',
-     '<frame_id>{ns}/odom</frame_id>'),
+    (r'<frame_id>odom_gz</frame_id>',
+     '<frame_id>{ns}/odom_gz</frame_id>'),
     (r'<child_frame_id>base_footprint</child_frame_id>',
-     '<child_frame_id>{ns}/base_footprint</child_frame_id>'),
+     '<child_frame_id>{ns}/base_footprint_gz</child_frame_id>'),
     (r'<gz_frame_id>base_scan</gz_frame_id>',
      '<gz_frame_id>{ns}/base_scan</gz_frame_id>'),
 ]
@@ -56,7 +63,7 @@ Ensure the DiffDrive plugin block contains explicit <topic>, <odom_topic>,
         if '<topic>' not in body:
             injections.append(f'      <topic>/{ns}/cmd_vel</topic>')
         if '<odom_topic>' not in body:
-            injections.append(f'      <odom_topic>/{ns}/odom</odom_topic>')
+            injections.append(f'      <odom_topic>/{ns}/odom_wheels</odom_topic>')
         if '<tf_topic>' not in body:
             injections.append('      <tf_topic>/tf</tf_topic>')
 
@@ -96,6 +103,20 @@ Generate a namespaced TurtleBot3 Burger SDF for robot *ns*.
 
     # Inject DiffDrive topics if missing
     content = _inject_diffdrive_topics(content, ns)
+
+    # Inject individual wheel configurations
+    if ns in WHEEL_CONFIGS:
+        cfg = WHEEL_CONFIGS[ns]
+        content = re.sub(
+            r'<wheel_radius>[^<]*</wheel_radius>',
+            f'<wheel_radius>{cfg["wheel_radius"]}</wheel_radius>',
+            content
+        )
+        content = re.sub(
+            r'<wheel_separation>[^<]*</wheel_separation>',
+            f'<wheel_separation>{cfg["wheel_separation"]}</wheel_separation>',
+            content
+        )
 
     # Apply all remaining topic / frame patches
     for pattern, replacement in _TOPIC_PATCHES:

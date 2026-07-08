@@ -15,16 +15,18 @@ from costmap_utils import (
     free_counts_per_side,
 )
 from convoy_tracking import (
-    compute_goal_point,
+    compute_goal_and_index,
+    is_newer_breadcrumb,
     should_hold,
 )
 from follower_state import (
     FollowerState,
     classify_state,
-    build_detour_command,
     build_search_command,
 )
 from safety_controller import SafetyController
+from local_planner import LocalPlanner
+from multi_tb3_system.perception.laser_processor import process_scan
 
 
 # Geometry helpers
@@ -83,6 +85,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
         max_lin: float,
         max_ang: float,
         safety: SafetyController,
+        enable_local_planner: bool = True,
     ) -> None:
         self._gap                        = (convoy_slot - 1) * convoy_spacing
         self.lookahead_distance          = lookahead_distance
@@ -99,12 +102,30 @@ Stateful Pure Pursuit + state-machine convoy follower.
         self.max_lin                     = max_lin
         self.max_ang                     = max_ang
         self.safety                      = safety
+        self.enable_local_planner        = enable_local_planner
+
+        # Initialize local planner if enabled
+        self.local_planner: Optional[LocalPlanner] = None
+        if self.enable_local_planner:
+            self.local_planner = LocalPlanner(
+                max_linear_vel=max_lin,
+                max_angular_vel=max_ang,
+                max_linear_acc=2.0,
+                max_angular_acc=3.0,
+                velocity_samples=10,  # More samples for better paths
+                angular_samples=15,   # More angular samples for narrow gaps
+                predict_time=1.5,
+                robot_radius=0.12,    # Physical radius of TB3 Burger
+                goal_weight=0.8,      # Reduced to allow detours
+                velocity_weight=1.5,  # Increased strongly to prevent freezing (keep moving!)
+                obstacle_weight=3.0,  # Increased to keep wider berth
+                control_period=0.05,
+            )
 
         # Per-cycle mutable state
         self._last_closest_idx:  int            = 0
         self._stationary_since:  Optional[int]  = None   # wall-clock ns
         self._emergency_since:   Optional[int]  = None   # wall-clock ns
-        self._prev_emergency:    bool            = False
         self._state_for_timer_reset: FollowerState = FollowerState.TRACKING
         self._last_newest_time_ns: int          = 0      # ns since epoch
 
@@ -123,7 +144,7 @@ Stateful Pure Pursuit + state-machine convoy follower.
         scan,                               # sensor_msgs/LaserScan or None
         scan_age_s: float,                  # seconds since scan was received
         now_ns: int,                        # current wall-clock time [ns]
-    ) -> Tuple[float, float, bool]:
+    ) -> Tuple[float, float]:
         """
 Compute one control cycle.
 """
@@ -150,15 +171,7 @@ Compute one control cycle.
             scan_for_safety = scan
 
         # Goal point: arc-length `gap` back from path end
-        goal = compute_goal_point(path, self._gap)
-        goal_idx = 0
-        acc = 0.0
-        for i in range(len(path) - 1, 0, -1):
-            acc += math.hypot(path[i][0] - path[i - 1][0],
-                              path[i][1] - path[i - 1][1])
-            if acc >= self._gap:
-                goal_idx = i - 1
-                break
+        goal, goal_idx = compute_goal_and_index(path, self._gap)
 
         # Path-length guard (P4)
         path_too_short = (
@@ -202,6 +215,35 @@ Compute one control cycle.
         gx_local, gy_local = to_robot_frame(goal[0], goal[1], rx, ry, ryaw)
         dist_to_goal        = math.hypot(gx_local, gy_local)
 
+        # LiDAR Target Tracking
+        if scan_for_safety is not None and len(path) > 0:
+            target_gap = max(0.0, self._gap - self.safety.predecessor_gap)
+            _, target_idx = compute_goal_and_index(path, target_gap)
+
+            expected_local_x, expected_local_y = to_robot_frame(path[target_idx][0], path[target_idx][1], rx, ry, ryaw)
+            rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
+            target_cluster, _ = process_scan(
+                ranges=list(scan_for_safety.ranges),
+                angle_min=scan_for_safety.angle_min,
+                angle_increment=scan_for_safety.angle_increment,
+                range_min=rmin,
+                front_half_angle_deg=90.0,
+                expected_local_pos=(expected_local_x, expected_local_y)
+            )
+            if target_cluster is not None and target_cluster.confidence > 0.5:
+                # Calculate physical error: where the leader actually is vs where Odometry thinks it is.
+                err_x = target_cluster.centroid_x - expected_local_x
+                err_y = target_cluster.centroid_y - expected_local_y
+                
+                # Clamp the error to prevent massive goal shifts if an obstacle is misidentified as a robot
+                # Increased clamp to 0.6m to allow full recovery of large tracking errors or drift
+                err_x = max(-0.6, min(0.6, err_x))
+                err_y = max(-0.6, min(0.6, err_y))
+                
+                # Store raw error for follower_node.py to update the global TF
+                self._raw_err_x = err_x
+                self._raw_err_y = err_y
+
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:
             pursuit_linear  = 0.0
@@ -229,6 +271,12 @@ Compute one control cycle.
 
         # State-machine inputs
         blocked              = is_goal_blocked(cm, gx_local, gy_local)
+        
+        # Hysteresis: If we were in DETOUR, keep DETOUR active until we are facing the clear goal
+        if self._state_for_timer_reset == FollowerState.DETOUR and not blocked:
+            if abs(alpha) > 0.4:
+                blocked = True
+                
         left_free, right_free = free_counts_per_side(cm)
         both_blocked         = (left_free == 0 and right_free == 0)
 
@@ -251,14 +299,10 @@ Compute one control cycle.
             if self._emergency_since is not None else 0.0
         )
 
-        # safety_emergency_now is resolved by check_and_modify_ex() below
-        safety_emergency_now = False
-
         # Classify next state
         state = classify_state(
             goal_blocked=blocked,
             both_sides_blocked=both_blocked,
-            safety_emergency=safety_emergency_now,
             hold_active=hold,
             stationary_duration_s=stationary_duration,
             emergency_duration_s=emergency_duration,
@@ -266,27 +310,30 @@ Compute one control cycle.
             has_unreached_breadcrumbs=has_unreached,
         )
 
+        # LATCH the SEARCH state so escape maneuvers (backing up) aren't cancelled after 1 frame
+        if hasattr(self, '_search_until') and self._search_until > now_ns:
+            state = FollowerState.SEARCH
+        elif state == FollowerState.SEARCH:
+            self._search_until = now_ns + int(1.5 * 1e9)  # Escape for 1.5 seconds
+
         if state == FollowerState.HOLD:
-            base_linear, base_angular = 0.0, 0.0
-        elif state == FollowerState.EMERGENCY_STOP:
             base_linear, base_angular = 0.0, 0.0
         elif state == FollowerState.SEARCH:
             base_linear, base_angular = build_search_command(
                 self.search_angular_velocity, self.max_ang,
             )
         elif state == FollowerState.DETOUR:
-            base_linear, base_angular = build_detour_command(
-                cm, pursuit_linear,
-                self.max_lin, self.max_ang,
-                self.detour_forward_min_vel,
-            )
-            # Bias detour angular toward the goal when goal is more than 45°
-            goal_bearing = math.atan2(gy_local, gx_local)
-            if abs(goal_bearing) > math.radians(45):
-                goal_sign   = 1.0 if goal_bearing > 0 else -1.0
-                detour_sign = 1.0 if base_angular  > 0 else -1.0
-                if goal_sign != detour_sign:
-                    base_angular = -base_angular
+            # Use local planner if enabled, otherwise use simple detour
+            if self.enable_local_planner and self.local_planner is not None:
+                # Update local planner's current velocity for dynamic window
+                self.local_planner.update_current_velocity(
+                    self._pending_linear_for_stationary if hasattr(self, '_pending_linear_for_stationary') else 0.0,
+                    self._pending_angular_for_stationary if hasattr(self, '_pending_angular_for_stationary') else 0.0
+                )
+                # Compute velocity toward goal using local planner
+                base_linear, base_angular = self.local_planner.compute_velocity(
+                    gx_local, gy_local, cm, ryaw
+                )
         else:  # TRACKING
             base_linear, base_angular = pursuit_linear, pursuit_angular
 
@@ -311,13 +358,13 @@ Compute one control cycle.
         elif self._state_for_timer_reset == FollowerState.TRACKING:
             # Only reset when cleanly back in TRACKING, not on momentary
             self._emergency_since = None
-        self._prev_emergency = safety_emergency_now
 
         # Stationary-duration timer
         self._pending_linear_for_stationary = linear_x
+        self._pending_angular_for_stationary = angular_z
 
         self._state_for_timer_reset = state
-        return linear_x, angular_z, safety_emergency_now
+        return linear_x, angular_z
 
     def update_stationary_timer(self, actual_linear: float, now_ns: int) -> None:
         """Call this AFTER slew-limiting so the timer reflects the wire command."""

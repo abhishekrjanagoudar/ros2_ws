@@ -27,10 +27,11 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/convoy_publisher.py
   scripts/convoy_tracking.py
-  scripts/costmap_generator.py
+
   scripts/costmap_utils.py
   scripts/follower_node.py
   scripts/follower_state.py
+  scripts/local_planner.py
   scripts/motion_controller.py
   scripts/safety_controller.py
   scripts/teleop_controller.py

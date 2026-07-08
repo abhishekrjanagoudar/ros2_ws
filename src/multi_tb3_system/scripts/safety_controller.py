@@ -45,7 +45,8 @@ Initialize the safety controller.
         range_min: float,
     ) -> Tuple[float, float, bool]:
         """
-Returns
+Returns (min_left, min_right, is_emergency).
+Emergency detection now sees ALL obstacles including the leader - no predecessor filtering.
 """
         emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
         steer_half     = math.radians(STEER_HALF_ANGLE_DEG)
@@ -60,20 +61,21 @@ Returns
             angle = angle_min + i * angle_increment
             angle = math.atan2(math.sin(angle), math.cos(angle))  # wrap to (-π, π]
 
-            PREDECESSOR_HALF_ANGLE = math.radians(15.0)
-            if (self.predecessor_gap > 0.0
-                    and abs(angle) <= PREDECESSOR_HALF_ANGLE):
-                lo = self.predecessor_gap * 0.3
-                hi = self.predecessor_gap * 1.2
-                if lo <= r <= hi:
-                    continue
-
-            # Emergency cone (±45°)
+            # Emergency cone (±45°) - NO FILTERING - detects all obstacles including leader
             if abs(angle) <= emergency_half and r < self.safe_distance:
                 is_emerg = True
 
-            # Steering cone (±60°)
+            # Steering cone (±60°) - still uses predecessor filter for gentle bias
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
+                # Filter out predecessor for steering bias only
+                PREDECESSOR_HALF_ANGLE = math.radians(15.0)
+                if (self.predecessor_gap > 0.0
+                        and abs(angle) <= PREDECESSOR_HALF_ANGLE):
+                    lo = self.predecessor_gap * 0.3
+                    hi = self.predecessor_gap * 1.2
+                    if lo <= r <= hi:
+                        continue
+                
                 if angle >= 0:
                     min_left  = min(min_left,  r)
                 else:
@@ -91,8 +93,9 @@ Returns
     ) -> Tuple[float, float]:
         """Apply safety rules and clamp velocities given pre-computed side data."""
         if is_emergency:
-            # Hard stop on linear; allow angular so robot can recover
-            linear_x = 0.0
+            # Hard stop on forward linear; allow angular and reversing so robot can recover
+            if linear_x > 0.0:
+                linear_x = 0.0
         else:
             # Gentle steering bias away from close side-obstacles
             if min_left < STEER_INFLUENCE_RANGE and min_left < min_right:
@@ -109,23 +112,6 @@ Returns
         return linear_x, angular_z
 
     # Public API
-
-    def check_and_modify(
-        self,
-        linear_x: float,
-        angular_z: float,
-        ranges: List[float],
-        angle_min: float,
-        angle_increment: float,
-        range_min: float = 0.12,
-    ) -> Tuple[float, float]:
-        """
-Apply safety rules and return the (possibly modified) velocity pair.
-"""
-        min_left, min_right, is_emerg = self._scan_sides(
-            ranges, angle_min, angle_increment, range_min,
-        )
-        return self._apply_rules(linear_x, angular_z, min_left, min_right, is_emerg)
 
     def check_and_modify_ex(
         self,
@@ -147,24 +133,6 @@ Single-pass safety check — preferred in tight control loops.
         )
         return safe_lin, safe_ang, is_emerg
 
-    def is_emergency(
-        self,
-        ranges: List[float],
-        angle_min: float,
-        angle_increment: float,
-        range_min: float = 0.12,
-    ) -> bool:
-        """Return True if an obstacle is inside the front emergency cone."""
-        emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
-        for i, r in enumerate(ranges):
-            if not math.isfinite(r) or r < range_min:
-                continue
-            angle = angle_min + i * angle_increment
-            angle = math.atan2(math.sin(angle), math.cos(angle))
-            if abs(angle) <= emergency_half and r < self.safe_distance:
-                return True
-        return False
-
     def filter_predecessor_returns(
         self,
         ranges: list,
@@ -184,9 +152,3 @@ Single-pass safety check — preferred in tight control loops.
             if abs(angle) <= PREDECESSOR_HALF_ANGLE and lo <= r <= hi:
                 filtered[i] = float('inf')
         return filtered
-
-    # 
-
-    def get_emergency_stop_twist(self) -> Tuple[float, float]:
-        """Return zero-velocity command (full stop)."""
-        return 0.0, 0.0
