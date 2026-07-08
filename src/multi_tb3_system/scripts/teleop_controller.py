@@ -38,9 +38,9 @@ MSG = """
 ╠════════════════════════════════════════════════════╣
 ║                                                    ║
 ║  Moving around (Hold key to move):                 ║
-║        w                   i                       ║
+║        w                        i                  ║
 ║   a    s    d      OR      j    k    l             ║
-║        x                   ,                       ║
+║        x                        ,                  ║
 ║                                                    ║
 ║  w/i : Forward                                     ║
 ║  x/, : Backward                                    ║

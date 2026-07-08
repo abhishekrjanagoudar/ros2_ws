@@ -32,7 +32,7 @@ def yaw_from_quat(z: float, w: float) -> float:
 
 
 class DriftLogger(Node):
-    def __init__(self, ros_ns: str, gz_model: str, out_path: str):
+    def __init__(self, ros_ns: str, gz_model: str, direction: str, out_path: str):
         super().__init__('drift_logger_square')
 
         try:
@@ -42,6 +42,7 @@ class DriftLogger(Node):
 
         self.ros_ns   = ros_ns
         self.gz_model = gz_model
+        self.direction = direction
         self.out_path = out_path
 
         self.robots = ['tb1', 'tb2', 'tb3']
@@ -199,6 +200,37 @@ class DriftLogger(Node):
         rclpy.spin_once(self, timeout_sec=0.1)
         self._log_sample('rotate_cw_90_done')
 
+    def _rotate_ccw_90(self):
+        self.get_logger().info('Starting rotation (CCW 90)...')
+        while self.all_odoms[self.gz_model][2] is None:
+            rclpy.spin_once(self, timeout_sec=0.02)
+
+        start_yaw_rad = math.radians(self.all_odoms[self.gz_model][2])
+        target_delta  = math.pi / 2
+        kp = 1.8; omega_max = 0.6; omega_min = 0.08
+        tol = math.radians(0.5)
+        zero = Twist()
+
+        while True:
+            rclpy.spin_once(self, timeout_sec=0.01)
+            curr = math.radians(self.all_odoms[self.gz_model][2])
+            delta     = (curr - start_yaw_rad + math.pi) % (2 * math.pi) - math.pi
+            remaining = (target_delta - delta + math.pi) % (2 * math.pi) - math.pi
+            if abs(remaining) <= tol:
+                break
+            omega = kp * remaining
+            omega = max(-omega_max, min(-omega_min, omega)) if remaining < 0 \
+                else max(omega_min, min(omega_max, omega))
+            twist = Twist(); twist.angular.z = omega
+            self.cmd_vel_pub.publish(twist)
+
+        for _ in range(10):
+            self.cmd_vel_pub.publish(zero)
+            rclpy.spin_once(self, timeout_sec=0.02)
+        time.sleep(0.15)
+        rclpy.spin_once(self, timeout_sec=0.1)
+        self._log_sample('rotate_ccw_90_done')
+
     def _move_forward_2m(self):
         self.get_logger().info('Starting forward motion (2m)...')
         while self.all_odoms[self.gz_model][0] is None:
@@ -239,10 +271,16 @@ class DriftLogger(Node):
             self._elapsed()
             self._log_sample('start')
 
-            for side in range(1, 5):
-                self.get_logger().info(f'=== SIDE {side}/4 ===')
-                self._rotate_cw_90()
-                self._move_forward_2m()
+            if self.direction == 'right':
+                for side in range(1, 5):
+                    self.get_logger().info(f'=== CW SIDE {side}/4 ===')
+                    self._rotate_cw_90()
+                    self._move_forward_2m()
+            elif self.direction == 'left':
+                for side in range(1, 5):
+                    self.get_logger().info(f'=== CCW SIDE {side}/4 ===')
+                    self._rotate_ccw_90()
+                    self._move_forward_2m()
 
             self.get_logger().info('=== MOTION COMPLETE — settling ===')
             time.sleep(1.0)
@@ -271,16 +309,17 @@ class DriftLogger(Node):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Square motion drift logger: 4x (rotate 90 CW + move 2m)'
+        description='Square motion drift logger: 4x (rotate 90 + move 2m)'
     )
     parser.add_argument('ros_ns',   help='ROS2 namespace, e.g. /tb1')
     parser.add_argument('gz_model', help='Gazebo model name, e.g. tb1')
+    parser.add_argument('direction', choices=['left', 'right'], help='Direction to turn (left=CCW, right=CW)')
     parser.add_argument('--out', default='/tmp/drift_square.csv',
                         help='CSV output path')
     args = parser.parse_args()
 
     rclpy.init()
-    node = DriftLogger(args.ros_ns, args.gz_model, args.out)
+    node = DriftLogger(args.ros_ns, args.gz_model, args.direction, args.out)
     try:
         node.run()
     finally:

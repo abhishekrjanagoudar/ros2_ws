@@ -74,14 +74,15 @@ def _make_robot_actions(ns: str, x: float, urdf: str, use_sim_time: bool, is_lea
 
     actions = [spawn, rsp, bridge]
 
-    static_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name=f'static_tf_{ns}',
-        arguments=[str(x), str(SPAWN_Y), str(SPAWN_Z), '0', '0', '0', 'world', f'{ns}/odom'],
-        output='screen'
-    )
-    actions.append(static_tf)
+    if is_leader:
+        static_tf = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name=f'static_tf_{ns}',
+            arguments=[str(x), str(SPAWN_Y), str(SPAWN_Z), '0', '0', '0', 'world', f'{ns}/odom'],
+            output='screen'
+        )
+        actions.append(static_tf)
 
 
 

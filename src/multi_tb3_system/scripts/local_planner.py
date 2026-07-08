@@ -93,16 +93,10 @@ class LocalPlanner:
     ) -> Tuple[float, float]:
         """
         Compute collision-free velocity toward goal using costmap.
-        
-        Args:
-            goal_x: Goal x position in robot frame [m]
-            goal_y: Goal y position in robot frame [m]
-            costmap: Occupancy costmap for obstacle detection
-            current_yaw: Current robot yaw (for trajectory prediction) [rad]
-            
-        Returns:
-            (linear_vel, angular_vel): Best velocity command
         """
+        # Precompute distance map for fast clearance checking
+        dist_map = self._compute_distance_map(costmap)
+
         # Generate velocity candidates within dynamic window
         candidates = self._generate_candidates()
         
@@ -120,7 +114,7 @@ class LocalPlanner:
             if not candidate.collision:
                 candidate.score = self._evaluate_trajectory(
                     candidate.linear, candidate.angular,
-                    trajectory, goal_x, goal_y, costmap
+                    trajectory, goal_x, goal_y, costmap, dist_map
                 )
             else:
                 candidate.score = -1e6  # Very negative score for collision
@@ -135,6 +129,37 @@ class LocalPlanner:
         
         return best.linear, best.angular
     
+    def _compute_distance_map(self, costmap: Costmap) -> list[float]:
+        """Precompute distance to nearest obstacle for all cells using BFS."""
+        width = costmap.width
+        height = costmap.height
+        dist_map = [float('inf')] * (width * height)
+        queue = []
+        
+        # Initialize obstacles
+        for i, val in enumerate(costmap.data):
+            if val >= 50:
+                dist_map[i] = 0.0
+                queue.append((i % width, i // width))
+                
+        # BFS expansion
+        head = 0
+        while head < len(queue):
+            cx, cy = queue[head]
+            head += 1
+            d = dist_map[cy * width + cx]
+            
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                nx, ny = cx + dx, cy + dy
+                if 0 <= nx < width and 0 <= ny < height:
+                    nidx = ny * width + nx
+                    nd = d + math.hypot(dx, dy)
+                    if nd < dist_map[nidx]:
+                        dist_map[nidx] = nd
+                        queue.append((nx, ny))
+                        
+        return dist_map
+
     def _generate_candidates(self) -> List[VelocityCandidate]:
         """Generate velocity candidates within dynamic window."""
         candidates = []
@@ -219,7 +244,6 @@ class LocalPlanner:
     def _is_occupied(self, x: float, y: float, costmap: Costmap) -> bool:
         """Check if position (with robot radius) is occupied in costmap."""
         # Convert to costmap coordinates
-        # Convert to costmap coordinates
         cx = int((x - costmap.origin_x) / costmap.resolution)
         cy = int((y - costmap.origin_y) / costmap.resolution)
         
@@ -250,6 +274,7 @@ class LocalPlanner:
         goal_x: float,
         goal_y: float,
         costmap: Costmap,
+        dist_map: list[float],
     ) -> float:
         """
         Evaluate trajectory quality.
@@ -267,7 +292,13 @@ class LocalPlanner:
         # 3. Obstacle clearance: favor trajectories far from obstacles
         min_clearance = float('inf')
         for x, y in trajectory:
-            clearance = self._get_clearance(x, y, costmap)
+            cx = int((x - costmap.origin_x) / costmap.resolution)
+            cy = int((y - costmap.origin_y) / costmap.resolution)
+            if 0 <= cx < costmap.width and 0 <= cy < costmap.height:
+                dist_cells = dist_map[cy * costmap.width + cx]
+                clearance = dist_cells * costmap.resolution
+            else:
+                clearance = 10.0
             min_clearance = min(min_clearance, clearance)
         obstacle_score = min_clearance
         
@@ -279,29 +310,3 @@ class LocalPlanner:
         )
         
         return total_score
-    
-    def _get_clearance(self, x: float, y: float, costmap: Costmap) -> float:
-        """Get minimum distance to nearest obstacle from position."""
-        cx = int((x - costmap.origin_x) / costmap.resolution)
-        cy = int((y - costmap.origin_y) / costmap.resolution)
-        
-        # Bounds check
-        if not (0 <= cx < costmap.width and 0 <= cy < costmap.height):
-            return 0.0
-        
-        # Search for nearest obstacle within reasonable radius
-        search_radius = 20  # cells
-        min_dist = float('inf')
-        
-        for dx in range(-search_radius, search_radius + 1):
-            for dy in range(-search_radius, search_radius + 1):
-                check_x = cx + dx
-                check_y = cy + dy
-                
-                if (0 <= check_x < costmap.width and 
-                    0 <= check_y < costmap.height):
-                    if costmap.data[check_y * costmap.width + check_x] == 100:
-                        dist = math.hypot(dx, dy) * costmap.resolution
-                        min_dist = min(min_dist, dist)
-        
-        return min_dist if min_dist != float('inf') else 10.0  # Max clearance

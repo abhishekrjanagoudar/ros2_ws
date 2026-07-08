@@ -200,9 +200,6 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 | `gz` | bool | `false` | `true`, `false` | Show Gazebo 3D viewer window |
 | `rviz` | bool | `false` | `true`, `false` | Show RViz2 visualization |
 | `ros_ui` | bool | `false` | `true`, `false` | **Convenience override:** `true` → forces `gz=true` + `rviz=true` |
-| `enable_rf2o` | bool | `true` | `true`, `false` | Enable RF2O laser odometry for high-precision tracking |
-
-
 
 ---
 
@@ -213,7 +210,7 @@ All arguments are declared on `robot.launch.py` — the **single entry point** f
 | Topic | Type | Direction | Publisher | Subscriber |
 |---|---|:---:|---|---|
 | `/tbX/scan` | `sensor_msgs/LaserScan` | Gz → ROS | Gazebo LiDAR sensor | `follower_node` |
-| `/tbX/odom` | `nav_msgs/Odometry` | Gz → ROS | Gazebo DiffDrive / `rf2o_laser_odometry` | `convoy_publisher` / `follower_node` |
+| `/tbX/odom` | `nav_msgs/Odometry` | Gz → ROS | Gazebo DiffDrive | `convoy_publisher` / `follower_node` |
 | `/tbX/cmd_vel` | `geometry_msgs/msg/Twist` | ROS → Gz | `teleop_controller` / `follower_node` | Gazebo DiffDrive |
 | `/tbX/joint_states` | `sensor_msgs/JointState` | Gz → ROS | Gazebo JointStatePublisher | `robot_state_publisher` |
 
@@ -255,10 +252,6 @@ ros2_ws/src/multi_tb3_system/
 │   │   └── laser_processor.py      # Scan clustering library (future use)
 │   ├── generate_sdf.py             # Per-robot SDF topic patching (multi-robot isolation)
 │   └── launch_common.py            # ⭐ Shared config: spawn geometry, timing, helpers
-│
-├── rf2o_laser_odometry/            (C++ package)
-│   ├── src/                        # Fast 2D laser odometry implementation
-│   └── launch/                     # ROS 2 node launchers
 │
 ├── scripts/                        (Executable ROS nodes)
 │   ├── follower_node.py            # Autonomous follower (reusable for tb2, tb3, …)
@@ -471,12 +464,6 @@ Wait at least 12 seconds after launch before checking. If still no followers aft
 | **ROS distro** | Jazzy Jalisco |
 | **Gazebo** | Harmonic (gz-sim 8.x) |
 | **Python** | 3.12 |
-
-### RF2O Laser Odometry Integration
-The workspace now includes the `rf2o_laser_odometry` package. When `enable_rf2o:=true` is used:
-- Each robot runs a dedicated `rf2o_laser_odometry_node`.
-- Wheel odometry from Gazebo is augmented/replaced with high-frequency, high-precision laser-based planar odometry.
-- This mitigates drift caused by wheel slip during Pure Pursuit sharp turns.
 
 ### What's New in v0.2.0
 

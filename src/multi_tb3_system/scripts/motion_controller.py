@@ -15,14 +15,13 @@ from costmap_utils import (
     free_counts_per_side,
 )
 from convoy_tracking import (
-    compute_goal_point,
-    get_path_index_by_gap,
+    compute_goal_and_index,
+    is_newer_breadcrumb,
     should_hold,
 )
 from follower_state import (
     FollowerState,
     classify_state,
-    build_detour_command,
     build_search_command,
 )
 from safety_controller import SafetyController
@@ -172,8 +171,7 @@ Compute one control cycle.
             scan_for_safety = scan
 
         # Goal point: arc-length `gap` back from path end
-        goal = compute_goal_point(path, self._gap)
-        goal_idx = get_path_index_by_gap(path, self._gap)
+        goal, goal_idx = compute_goal_and_index(path, self._gap)
 
         # Path-length guard (P4)
         path_too_short = (
@@ -220,7 +218,7 @@ Compute one control cycle.
         # LiDAR Target Tracking
         if scan_for_safety is not None and len(path) > 0:
             target_gap = max(0.0, self._gap - self.safety.predecessor_gap)
-            target_idx = get_path_index_by_gap(path, target_gap)
+            _, target_idx = compute_goal_and_index(path, target_gap)
 
             expected_local_x, expected_local_y = to_robot_frame(path[target_idx][0], path[target_idx][1], rx, ry, ryaw)
             rmin = scan_for_safety.range_min if scan_for_safety.range_min > 0 else 0.12
@@ -242,26 +240,9 @@ Compute one control cycle.
                 err_x = max(-0.6, min(0.6, err_x))
                 err_y = max(-0.6, min(0.6, err_y))
                 
-                # Apply an EMA filter to the offset to prevent violent swerves (alpha = 0.1)
-                if not hasattr(self, '_ema_err_x'):
-                    self._ema_err_x = err_x
-                    self._ema_err_y = err_y
-                else:
-                    self._ema_err_x = 0.1 * err_x + 0.9 * self._ema_err_x
-                    self._ema_err_y = 0.1 * err_y + 0.9 * self._ema_err_y
-            
-            # ALWAYS shift the goal by the smoothed physical error (if it exists) to eliminate drift!
-            # Even if the target is occluded this frame, the odometry drift hasn't vanished.
-            if hasattr(self, '_ema_err_x'):
-                gx_local += self._ema_err_x
-                gy_local += self._ema_err_y
-                lx += self._ema_err_x
-                ly += self._ema_err_y
-                # Recalculate pure pursuit variables with corrected lookahead
-                Ld = max(math.hypot(lx, ly), 1e-3)
-                alpha = math.atan2(ly, lx)
-                # Recalculate distance to goal so it doesn't stop prematurely based on drifted odometry!
-                dist_to_goal = math.hypot(gx_local, gy_local)
+                # Store raw error for follower_node.py to update the global TF
+                self._raw_err_x = err_x
+                self._raw_err_y = err_y
 
         # 4. Pure Pursuit base command.
         if dist_to_goal <= self.goal_tol:
@@ -347,26 +328,12 @@ Compute one control cycle.
                 # Update local planner's current velocity for dynamic window
                 self.local_planner.update_current_velocity(
                     self._pending_linear_for_stationary if hasattr(self, '_pending_linear_for_stationary') else 0.0,
-                    0.0
+                    self._pending_angular_for_stationary if hasattr(self, '_pending_angular_for_stationary') else 0.0
                 )
                 # Compute velocity toward goal using local planner
                 base_linear, base_angular = self.local_planner.compute_velocity(
                     gx_local, gy_local, cm, ryaw
                 )
-            else:
-                # Simple detour: biased turning
-                base_linear, base_angular = build_detour_command(
-                    cm, pursuit_linear,
-                    self.max_lin, self.max_ang,
-                    self.detour_forward_min_vel,
-                )
-                # Bias detour angular toward the goal when goal is more than 45°
-                goal_bearing = math.atan2(gy_local, gx_local)
-                if abs(goal_bearing) > math.radians(45):
-                    goal_sign   = 1.0 if goal_bearing > 0 else -1.0
-                    detour_sign = 1.0 if base_angular  > 0 else -1.0
-                    if goal_sign != detour_sign:
-                        base_angular = -base_angular
         else:  # TRACKING
             base_linear, base_angular = pursuit_linear, pursuit_angular
 
@@ -394,6 +361,7 @@ Compute one control cycle.
 
         # Stationary-duration timer
         self._pending_linear_for_stationary = linear_x
+        self._pending_angular_for_stationary = angular_z
 
         self._state_for_timer_reset = state
         return linear_x, angular_z

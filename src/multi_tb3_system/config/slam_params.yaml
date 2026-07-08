@@ -1,58 +1,77 @@
 tb1:
   slam_toolbox:
     ros__parameters:
-      # ROS Parameters
-      odom_frame: tb1/odom
-      map_frame: map
-      base_frame: tb1/base_footprint
-      scan_topic: /tb1/scan
-      use_map_saver: true
-      mode: mapping 
+
+      # Plugin params
+      solver_plugin: solver_plugins::CeresSolver # Ceres is the math solver goat, no cap
+      ceres_linear_solver: SPARSE_NORMAL_CHOLESKY # sparse cholesky, sounds fancy but it just works fast fr
+      ceres_preconditioner: SCHUR_JACOBI # Schur Jacobi vibes, cleans up the math before solving
+      ceres_trust_strategy: LEVENBERG_MARQUARDT # LM strategy, trust the process to find the sweet spot
+      ceres_dogleg_type: TRADITIONAL_DOGLEG # traditional dogleg, ancient technique but still hits different
+      ceres_loss_function: None # no loss function because we don't care about outliers today
+
+      # ROS Parameters (Namespaced for tb1)
+      odom_frame: tb1/odom # tracks how much the wheels spin, pretty basic
+      map_frame: map # the main map frame, the absolute world origin, the big boss
+      base_frame: tb1/base_footprint # base link right on the floor under the bot, ground zero
+      scan_topic: /tb1/scan # where the lidar laser data streams in, super hype
+      use_map_saver: true # saves the map so we don't lose all our progress, valid
+      mode: mapping # we are actively mapping right now, building the world
+
+      # if you'd like to immediately start continuing a map at a given pose
+      # or at the dock, but they are mutually exclusive, if pose is given
+      # will use pose
+      #map_file_name: test_steve # file name for loading an old map, if we're resuming
+      # map_start_pose: [0.0, 0.0, 0.0] # starting position coordinates, where we spawn
+      #map_start_at_dock: true # starts at the home dock, pretty cozy
+
+      debug_logging: false # debug logs off, keeping the terminal clean and uncluttered
+      throttle_scans: 1 # process every single scan, no skipping, max focus
+      transform_publish_period: 0.02 # publishes tf super fast, keepin it real-time
+      map_update_interval: 5.0 # refreshes the map visual every 5 seconds, chill pace
+      resolution: 0.05 # 5cm grids, basically the pixel size of our map, pretty sharp
+      max_laser_range: 20.0 # lidar sees up to 20 meters, anything further is ignored
+      minimum_time_interval: 0.5 # wait at least 0.5s between adding scans, don't spam
+      transform_timeout: 0.2 # if tf takes longer than 0.2s, we assume it's ghosting us
+      tf_buffer_duration: 30.0 # remembers past moves for 30s, decent memory span
+      stack_size_to_use: 40000000 # huge stack size so the program doesn't crash when maps get thicc
+      enable_interactive_mode: true # lets us click and clean up nodes in Rviz, interactive vibes
 
       # General Parameters
-      debug_logging: false
-      throttle_scans: 1
-      transform_publish_period: 0.05
-      map_update_interval: 0.2
-      resolution: 0.05
-      max_laser_range: 15.0
-      minimum_time_interval: 0.1
-      transform_timeout: 0.2
-      tf_buffer_duration: 5.0
-      stack_capacity: 40000000
+      use_scan_matching: true # aligns scans to make the map look clean, not messy
+      use_scan_barycenter: true # uses scan center of mass, keeps things balanced
+      minimum_travel_distance: 0.5 # move 0.5m before dropping a new map node, no pointless updates
+      minimum_travel_heading: 0.5 # spin 0.5 rad (like 30 deg) before updating map, spin check
+      scan_buffer_size: 10 # keeps the last 10 scans in memory, small buffer
+      scan_buffer_maximum_scan_distance: 10.0 # max distance to trust scans for buffer matching, 10m limit
+      link_match_minimum_response_fine: 0.1 # minimum match quality score to link scans, keep it lowkey
+      link_scan_maximum_distance: 1.5 # don't link scans if they are further than 1.5m, too far fr
+      loop_search_maximum_distance: 3.0 # look for loop closures within 3 meters, local searches only
+      do_loop_closing: true # close loops when we visit old places to fix map drift, goated
+      loop_match_minimum_chain_size: 10 # need 10 matching scans in a row to trust a loop closure
+      loop_match_maximum_variance_coarse: 3.0 # max variance allowed for rough loop matching, don't be too wild
+      loop_match_minimum_response_coarse: 0.35 # rough loop check score threshold, got to be at least this good
+      loop_match_minimum_response_fine: 0.45 # fine loop check score threshold, needs to be extra clean
 
-      # Scan Matcher Parameters
-      use_scan_matching: true
-      use_scan_barycenter: true
-      minimum_travel_distance: 0.1
-      minimum_travel_heading: 0.1
-      scan_buffer_size: 10
-      scan_buffer_maximum_scan_distance: 10.0
-      link_match_minimum_response_fine: 0.1  
-      link_scan_maximum_distance: 1.5
-      loop_search_maximum_distance: 3.0
-      do_loop_closing: true 
-      loop_match_minimum_chain_size: 10           
-      loop_match_maximum_variance_coarse: 3.0     
-      loop_match_minimum_response_coarse: 0.35    
-      loop_match_minimum_response_fine: 0.45      
-
-      # Correlation Parameters
-      correlation_search_space_dimension: 0.5
-      correlation_search_space_resolution: 0.01
-      correlation_search_space_smear_deviation: 0.1 
+      # Correlation Parameters - Correlation Parameters
+      correlation_search_space_dimension: 0.5 # search area for scan matching is a 0.5m box, tight scan
+      correlation_search_space_resolution: 0.01 # check matches every 1cm, super precise search
+      correlation_search_space_smear_deviation: 0.1 # blurs the scan slightly to make matching smoother, smear vibes
 
       # Correlation Parameters - Loop Closure Parameters
-      loop_search_space_dimension: 8.0
-      loop_search_space_resolution: 0.05
-      loop_search_space_smear_deviation: 0.03
+      loop_search_space_dimension: 8.0 # loop closure search box is 8 meters wide, wide scan
+      loop_search_space_resolution: 0.05 # search resolution for loops is 5cm, medium search resolution
+      loop_search_space_smear_deviation: 0.03 # loop blur standard deviation, keeping loop matches tight
 
-      # Scan Matcher - Metrics
-      distance_variance_penalty: 0.5      
-      angle_variance_penalty: 1.0    
-      fine_search_angle_offset: 0.00349     
-      coarse_search_angle_offset: 0.349   
-      coarse_angle_resolution: 0.0349        
-      minimum_angle_penalty: 0.9
-      minimum_distance_penalty: 0.5
-      use_response_expansion: true
+      # Scan Matcher Parameters
+      distance_variance_penalty: 0.5 # penalize matches that drift too far in distance, keep it close
+      angle_variance_penalty: 1.0 # penalize matches that rotate too much, keep it straight
+
+      fine_search_angle_offset: 0.00349 # fine angle search range, super small adjustments
+      coarse_search_angle_offset: 0.349 # rough angle search range, checking wider turns
+      coarse_angle_resolution: 0.0349 # step size for rough angle search, standard steps
+      minimum_angle_penalty: 0.9 # minimum penalty scale for angle offset, don't hate on slight turns
+      minimum_distance_penalty: 0.5 # minimum penalty scale for distance offset, keep it fair
+      use_response_expansion: true # expands search if we can't find a good match, clutch feature
+      min_pass_through: 2 # check through at least 2 grid cells for validity, double check
+      occupancy_threshold: 0.1 # cell is occupied if probability is over 10%, pretty sensitive
