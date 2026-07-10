@@ -98,12 +98,14 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
                 linear_x = 0.0
         else:
             # Gentle steering bias away from close side-obstacles
-            if min_left < STEER_INFLUENCE_RANGE and min_left < min_right:
-                bias = (STEER_INFLUENCE_RANGE - min_left) / STEER_INFLUENCE_RANGE
-                angular_z -= 0.5 * bias
-            elif min_right < STEER_INFLUENCE_RANGE and min_right < min_left:
-                bias = (STEER_INFLUENCE_RANGE - min_right) / STEER_INFLUENCE_RANGE
-                angular_z += 0.5 * bias
+            # Only apply when moving forward to avoid spinning in place when stopped behind a leader
+            if linear_x > 0.01:
+                if min_left < STEER_INFLUENCE_RANGE and min_left < min_right:
+                    bias = (STEER_INFLUENCE_RANGE - min_left) / STEER_INFLUENCE_RANGE
+                    angular_z -= 0.5 * bias
+                elif min_right < STEER_INFLUENCE_RANGE and min_right < min_left:
+                    bias = (STEER_INFLUENCE_RANGE - min_right) / STEER_INFLUENCE_RANGE
+                    angular_z += 0.5 * bias
 
         # Velocity clamping
         linear_x  = max(-self.max_linear_vel,  min(linear_x,  self.max_linear_vel))

@@ -158,9 +158,10 @@ def select_target_cluster(
         
         if dist_to_ref <= lock_radius:
             # Calculate confidence based on distance and expected width (0.14m)
+            # Make the width error less punishing since LiDAR returns from the back of TB3 can vary
             dist_conf = max(0.0, 1.0 - (dist_to_ref / lock_radius))
             width_error = abs(best.physical_width - 0.14)
-            width_conf = max(0.0, 1.0 - (width_error / 0.15))
+            width_conf = max(0.0, 1.0 - (width_error / 0.30))  # Relaxed from 0.15 to 0.30
             
             best.confidence = dist_conf * width_conf
             return best

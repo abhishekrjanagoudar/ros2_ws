@@ -251,9 +251,10 @@ Compute one control cycle.
         else:
             forward_drive   = max(0.0, gx_local)
             if forward_drive <= 0.0:
-                # Goal is behind the robot — stop forward motion, allow only
+                # Goal is behind the robot — stop entirely and wait for the goal to move forward.
+                # Do not spin around to face it, as it causes annoying 180-degree flips for minor overshoots.
                 pursuit_linear  = 0.0
-                pursuit_angular = self.kp_angular * math.atan2(gy_local, -gx_local + 1e-6)
+                pursuit_angular = 0.0
             else:
                 creep          = self.kp_linear * dist_to_goal * 0.3
                 pursuit_linear = self.kp_linear * max(forward_drive, creep)
@@ -339,6 +340,7 @@ Compute one control cycle.
 
         # SafetyController hard override (single LiDAR pass)
         linear_x, angular_z = base_linear, base_angular
+        safety_emergency_now = False
         if scan_for_safety is not None:
             s    = scan_for_safety
             rmin = s.range_min if s.range_min > 0 else 0.12

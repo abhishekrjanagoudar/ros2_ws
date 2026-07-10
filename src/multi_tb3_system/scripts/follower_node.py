@@ -257,9 +257,9 @@ class FollowerNode(Node):
             err_world_x = err_x * math.cos(ryaw) - err_y * math.sin(ryaw)
             err_world_y = err_x * math.sin(ryaw) + err_y * math.cos(ryaw)
             
-            # Accumulate with small gain (0.05) to avoid violent jumping
-            self.tf_corr_x -= err_world_x * 0.05
-            self.tf_corr_y -= err_world_y * 0.05
+            # Accumulate with higher gain (0.15) for a stronger snap-back against drift
+            self.tf_corr_x -= err_world_x * 0.15
+            self.tf_corr_y -= err_world_y * 0.15
 
         self._publish_smoothed(linear_x, angular_z)
         

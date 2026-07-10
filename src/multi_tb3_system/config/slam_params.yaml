@@ -18,13 +18,6 @@ tb1:
       use_map_saver: true # saves the map so we don't lose all our progress, valid
       mode: mapping # we are actively mapping right now, building the world
 
-      # if you'd like to immediately start continuing a map at a given pose
-      # or at the dock, but they are mutually exclusive, if pose is given
-      # will use pose
-      #map_file_name: test_steve # file name for loading an old map, if we're resuming
-      # map_start_pose: [0.0, 0.0, 0.0] # starting position coordinates, where we spawn
-      #map_start_at_dock: true # starts at the home dock, pretty cozy
-
       debug_logging: false # debug logs off, keeping the terminal clean and uncluttered
       throttle_scans: 1 # process every single scan, no skipping, max focus
       transform_publish_period: 0.02 # publishes tf super fast, keepin it real-time
