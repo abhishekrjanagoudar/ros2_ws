@@ -79,12 +79,12 @@ ros2_ws/src/multi_tb3_system/
 │
 ├── config/
 │   ├── follower_params.yaml           # Pure Pursuit gains, spacing, limits
-│   └── cpr_office/                    # CPR Office world assets
 │
 ├── worlds/
 │   ├── empty.world                    # Flat ground plane (1 ms physics step)
 │   ├── columns.world                  # Flat ground alias
-│   └── pillars.world                  # 6 cylindrical obstacles (1 ms physics step)
+│   ├── pillars.world                  # 6 cylindrical obstacles (1 ms physics step)
+│   └── cpr_office/                    # CPR Office world assets
 │
 ├── models/
 │   └── turtlebot3_burger/

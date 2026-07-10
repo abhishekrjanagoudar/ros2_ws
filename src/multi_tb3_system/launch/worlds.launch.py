@@ -21,8 +21,8 @@ from launch.substitutions import LaunchConfiguration
 _WORLDS = {
     'empty':   ('worlds/empty.world',   None),
     'pillars': ('worlds/pillars.world', None),
-    'office':  ('config/cpr_office/worlds/office_cpr.world',
-                'config/cpr_office/models'),
+    'office':  ('worlds/cpr_office/worlds/office_cpr.world',
+                'worlds/cpr_office/models'),
 }
 
 
