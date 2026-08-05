@@ -66,7 +66,7 @@ Inputs (all keyword-only to keep call sites self-documenting):
 def build_search_command(
     search_angular_velocity: float,
     max_angular: float,
-    reverse_speed: float = -0.08,
+    reverse_speed: float = 0.0,
 ) -> tuple[float, float]:
     """
 Backing up while turning moves the robot away from convex

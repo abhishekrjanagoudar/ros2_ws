@@ -60,24 +60,23 @@ def _launch_setup(context, *args, **kwargs):
         )
         actions.append(TimerAction(period=COSTMAP_START, actions=[cg_node]))
 
-    # Leader trajectory publishers (all except the last robot)
-    for i in range(1, n_burgers + 1):
-        ns = f'tb{i}'
-        convoy_pub = Node(
-            package='multi_tb3_system',
-            executable='convoy_publisher.py',
-            name='convoy_publisher',
-            namespace=ns,
-            parameters=[{
-                'use_sim_time':   use_sim_time,
-                'path_frame':     'world',
-                'spawn_offset_x': spawn_x(i),
-                'spawn_offset_y': SPAWN_Y,
-            }],
-            output='screen',
-            emulate_tty=True,
-        )
-        actions.append(TimerAction(period=CONVOY_PUB_START, actions=[convoy_pub]))
+    # Leader trajectory publisher (only the global leader tb1 publishes the path)
+    ns = _LEADER_NS
+    convoy_pub = Node(
+        package='multi_tb3_system',
+        executable='convoy_publisher.py',
+        name='convoy_publisher',
+        namespace=ns,
+        parameters=[{
+            'use_sim_time':   use_sim_time,
+            'path_frame':     'world',
+            'spawn_offset_x': spawn_x(1),
+            'spawn_offset_y': SPAWN_Y,
+        }],
+        output='screen',
+        emulate_tty=True,
+    )
+    actions.append(TimerAction(period=CONVOY_PUB_START, actions=[convoy_pub]))
 
     # Pure-Pursuit followers (tb2, tb3, ...)
     follower_delays = {2: FOLLOWER1_START, 3: FOLLOWER2_START}
@@ -103,7 +102,7 @@ def _launch_setup(context, *args, **kwargs):
                 },
             ],
             remappings=[
-                ('convoy_path', f'/{leader_ns}/convoy_path'),
+                ('convoy_path', f'/{_LEADER_NS}/convoy_path'),
             ],
             output='screen',
             emulate_tty=True,

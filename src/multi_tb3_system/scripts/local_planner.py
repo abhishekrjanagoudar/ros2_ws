@@ -122,10 +122,10 @@ class LocalPlanner:
         # Select best candidate
         best = max(candidates, key=lambda c: c.score)
         
-        # If all candidates collide, gracefully reverse
+        # If all candidates collide, gracefully stop and turn in place
         if best.collision:
-            # Reversing at -0.1 m/s and turning slightly to clear
-            return -0.1, 0.2
+            # Stopped and turning slightly to clear
+            return 0.0, 0.2
         
         return best.linear, best.angular
     
