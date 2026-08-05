@@ -43,16 +43,18 @@ Initialize the safety controller.
         angle_min: float,
         angle_increment: float,
         range_min: float,
-    ) -> Tuple[float, float, bool]:
+    ) -> Tuple[float, float, float, bool]:
         """
-Returns (min_left, min_right, is_emergency).
-Emergency detection now sees ALL obstacles including the leader - no predecessor filtering.
-"""
+        Returns (min_left, min_right, min_front, is_emergency).
+        Emergency detection now sees ALL obstacles including the leader - no predecessor filtering.
+        """
         emergency_half = math.radians(EMERGENCY_HALF_ANGLE_DEG)
         steer_half     = math.radians(STEER_HALF_ANGLE_DEG)
+        predecessor_half = math.radians(15.0)
 
         min_left  = float('inf')
         min_right = float('inf')
+        min_front = float('inf')
         is_emerg  = False
 
         for i, r in enumerate(ranges):
@@ -65,12 +67,15 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
             if abs(angle) <= emergency_half and r < self.safe_distance:
                 is_emerg = True
 
+            # Front cone for ACC
+            if abs(angle) <= predecessor_half:
+                min_front = min(min_front, r)
+
             # Steering cone (±60°) - still uses predecessor filter for gentle bias
             if abs(angle) <= steer_half and r < STEER_INFLUENCE_RANGE:
                 # Filter out predecessor for steering bias only
-                PREDECESSOR_HALF_ANGLE = math.radians(15.0)
                 if (self.predecessor_gap > 0.0
-                        and abs(angle) <= PREDECESSOR_HALF_ANGLE):
+                        and abs(angle) <= predecessor_half):
                     lo = self.predecessor_gap * 0.3
                     hi = self.predecessor_gap * 1.2
                     if lo <= r <= hi:
@@ -81,7 +86,7 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
                 else:
                     min_right = min(min_right, r)
 
-        return min_left, min_right, is_emerg
+        return min_left, min_right, min_front, is_emerg
 
     def _apply_rules(
         self,
@@ -89,6 +94,7 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
         angular_z: float,
         min_left: float,
         min_right: float,
+        min_front: float,
         is_emergency: bool,
     ) -> Tuple[float, float]:
         """Apply safety rules and clamp velocities given pre-computed side data."""
@@ -97,6 +103,15 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
             if linear_x > 0.0:
                 linear_x = 0.0
         else:
+            # Adaptive Cruise Control (ACC) based on front distance
+            if self.predecessor_gap > 0.0 and min_front < self.predecessor_gap:
+                if linear_x > 0.0:
+                    if min_front <= self.safe_distance:
+                        linear_x = 0.0
+                    else:
+                        ratio = (min_front - self.safe_distance) / (self.predecessor_gap - self.safe_distance)
+                        linear_x *= ratio
+
             # Gentle steering bias away from close side-obstacles
             # Only apply when moving forward to avoid spinning in place when stopped behind a leader
             if linear_x > 0.01:
@@ -125,13 +140,13 @@ Emergency detection now sees ALL obstacles including the leader - no predecessor
         range_min: float = 0.12,
     ) -> Tuple[float, float, bool]:
         """
-Single-pass safety check — preferred in tight control loops.
-"""
-        min_left, min_right, is_emerg = self._scan_sides(
+        Single-pass safety check — preferred in tight control loops.
+        """
+        min_left, min_right, min_front, is_emerg = self._scan_sides(
             ranges, angle_min, angle_increment, range_min,
         )
         safe_lin, safe_ang = self._apply_rules(
-            linear_x, angular_z, min_left, min_right, is_emerg,
+            linear_x, angular_z, min_left, min_right, min_front, is_emerg,
         )
         return safe_lin, safe_ang, is_emerg
 
